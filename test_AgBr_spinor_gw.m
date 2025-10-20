@@ -10,6 +10,8 @@ KSSOLV_startup;
 % Whether to read the Vxc value of each band from Vxc.dat or to recalculate
 read_vxc = 0;
 % Read ground state wave function, energy level and other information from qe outputs
+% Files needed: charge-density.hdf5, data-file-schema.xml, wfc*.hdf5(number of all k-points)
+% Files optional: vxc.dat
 [sys, options, syms] = read_qe_gw('.\example\qe_data\AgBr', read_vxc);
 [sys, options] = gw_setup(sys, options);
 
