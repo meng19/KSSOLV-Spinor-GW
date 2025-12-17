@@ -1,1 +1,83 @@
 # Add any directories, files, or patterns you don't want to be tracked by version control
+# MATLAB 生成的文件
+*.mex*
+*.mex
+*.mexa64
+*.mexmaci64
+*.mexw64
+*.mexw32
+*.p
+*.pri
+*.slxc
+*.mlpkginstall
+
+# 临时文件和缓存
+*.asv
+*.autosave
+*.bak
+*.old
+
+# 仿真和模型文件
+*.slx
+*.mdl
+*.slxc
+*.slprj/
+simulinktemp/
+
+# 代码生成
+*_grt_rtw/
+*_ert_rtw/
+*/CodeTarget/
+
+# 数据文件
+*.mat
+*.fig
+*.mldatx
+
+# 打包文件
+*.mlappinstall
+*.mltbx
+*.mlapp
+
+# 项目相关
+.prj/
+.project/
+.myprefs
+*.proj
+
+# 报告和文档
+html/
+*.html
+*.pdf
+*.rtf
+
+# IDE 设置
+.mlint/
+*.sublime-project
+*.sublime-workspace
+.vscode/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 用户特定文件
+*.prefs
+*.prf
+*.lastsession
+
+# 编译输出
+*.obj
+*.o
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+
+# 测试和覆盖率
+coverage/
+html/
+*.m.html
+slcov_output/
+*.cst
