@@ -168,7 +168,18 @@ for ispin = 1 : nspin
                 
                 %%
                 I = eye(fbz.nmtx_cutoff(indrk(iq)));
-                coulg = getvcoul(fbz.nmtx(1, indrk(iq)), fbz.isrtx(:, indrk(iq)), ekin(:, indrk(iq)), coul_cutoff, 1);
+                if strcmp(sig.coul_cut, 'spherical_truncation')
+                    coulg = coulG_spherical_truncation(fbz.nmtx(1, indrk(iq)), fbz.isrtx(:, indrk(iq)), ekin(:, indrk(iq)), coul_cutoff, 1);
+                    
+                elseif strcmp(sig.coul_cut, 'cell_box_truncation')
+                    if iq > 1
+                        error('cell_box_truncation only support one Gamma=0 calculation')
+                    end
+                    coulg = coulG_cell_box_truncation(fbz.mtx{:, iq}, gvec, sys);
+                    
+                else
+                    error('Unknown truncation schemes for the Coulomb potential: %s. Please choose spherical_truncation or cell_box_truncation.', eps.coul_cut);
+                end
                 coulg_nocut = fact * coulg;
                 coulg_cutoff = coulg_nocut(1 : n_cutoff, 1);
                 eps_inv_I = eps_inv - I;
@@ -269,7 +280,7 @@ for ispin = 1 : nspin
                             aqsch{in, ispin} = aqs{in, ispin};
                         end
                     end
-
+                    
                     igpp_tmp = igpp{iq, ik};
                     valid_indices_tmp = valid_indices{iq, ik};
                     

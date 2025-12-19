@@ -205,7 +205,18 @@ for iq = 1:sys.nkpts
     chi0_sum = chi0_sum * fact;
     
     % 计算Coulomb势
-    coulg = getvcoul(nmtx_current, pol.isrtx(:, iq), ekin(:, iq), eps.coul_cutoff, 0);
+    if strcmp(eps.coul_cut, 'spherical_truncation')
+        coulg = coulG_spherical_truncation(nmtx_current, pol.isrtx(:, iq), ekin(:, iq), eps.coul_cutoff, 0);
+        
+    elseif strcmp(eps.coul_cut, 'cell_box_truncation')
+        if iq > 1
+            error('cell_box_truncation only support one Gamma=0 calculation')
+        end
+        coulg = coulG_cell_box_truncation(pol.mtx{:, iq}, gvec, sys);
+        
+    else
+        error('Unknown truncation schemes for the Coulomb potential: %s. Please choose spherical_truncation or cell_box_truncation.', eps.coul_cut);
+    end
     
     % 计算epsilon矩阵
     if use_gpu
