@@ -20,7 +20,9 @@ eps.nbnd = 30; % The number of energy bands in Epsilon calculation
 eps.nv = options.nv; % Valence band number in Epsilon calculation
 eps.nc = eps.nbnd - eps.nv; % Conduction band number in Epsilon calculation
 eps.cutoff = 2; % Dielectric matrix cutoff in Epsilon calculations, in units of Ry
-eps.coul_cutoff = 2; % Coulomb matrix cutoff in Epsilon calculations, in units of Bohr
+% eps.coul_cut = 'spherical_truncation'; % Truncation schemes for the Coulomb potential in Epsilon calculations
+% eps.coul_cutoff = 2; % Coulomb matrix cutoff in Epsilon calculations, in units of Bohr. Only work with spherical_truncation!
+eps.coul_cut = 'cell_box_truncation';
 eps.use_gpu = 0; % Whether to use GPU for Epsilon calculation
 eps.save_mem = 0; % Whether to explicitly store the M matrix in the Epsilon calculation to speed up the summation of k-points and bands
 eps = epsilon(sys, options, syms, eps); % Epsilon calculation main function
@@ -29,10 +31,12 @@ eps = epsilon(sys, options, syms, eps); % Epsilon calculation main function
 sig.nbnd = 30; % The number of energy bands in Sigma calculation
 sig.ndiag_min = 1; % The lowest quasiparticle energy level number to be calculated in the Sigma calculation
 sig.ndiag_max = 30; % The highest quasiparticle energy level number to be calculated in the Sigma calculation
-sig.coul_cutoff = 2; % Coulomb matrix cutoff in Sigma calculations, in units of Bohr
+% sig.coul_cut = 'spherical_truncation'; % Truncation schemes for the Coulomb potential in Sigma calculations
+% sig.coul_cutoff = 2; % Coulomb matrix cutoff in Sigma calculations, in units of Bohr. Only work with spherical_truncation!
+sig.coul_cut = 'cell_box_truncation';
 sig.no_symmetries_q_grid = 0; % Whether k-point symmetry is considered in Sigma calculation
 sig.exact_static_ch = 1; % Whether the static screened exchange is accurately calculated in the Sigma COHSEX calculation
-sig.use_gpu = 0; % Whether to use GPU for Sigma calculation
+sig.use_gpu = 1; % Whether to use GPU for Sigma calculation
 sig = sigma(eps, sig, sys, options, syms); % Sigma calculation main function
 
 % After the calculation is completed, the quasiparticle energy levels (ik, ib) of each k-point and band are stored in sig.eqp0.

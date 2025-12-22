@@ -24,7 +24,6 @@ ach = zeros([ndiag sys.nkpts nspin]);
 achx = zeros([ndiag sys.nkpts nspin]);
 sigrid = Ggrid(sys, 4 * sys.ecut);
 gvec = Gvector(sigrid,sys);
-coul_cutoff = sig.coul_cutoff;
 no_symmetries_q_grid = sig.no_symmetries_q_grid;
 sig.qpt = options.kpts;
 sig.nkn = sys.nkpts;
@@ -169,7 +168,7 @@ for ispin = 1 : nspin
                 %%
                 I = eye(fbz.nmtx_cutoff(indrk(iq)));
                 if strcmp(sig.coul_cut, 'spherical_truncation')
-                    coulg = coulG_spherical_truncation(fbz.nmtx(1, indrk(iq)), fbz.isrtx(:, indrk(iq)), ekin(:, indrk(iq)), coul_cutoff, 1);
+                    coulg = coulG_spherical_truncation(fbz.nmtx(1, indrk(iq)), fbz.isrtx(:, indrk(iq)), ekin(:, indrk(iq)), sig.coul_cutoff, 1);
                     
                 elseif strcmp(sig.coul_cut, 'cell_box_truncation')
                     if iq > 1
