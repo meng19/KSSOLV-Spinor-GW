@@ -32,14 +32,6 @@ if eps.freq_dep == 2 && eps.freq_dep_method == 2
     tmp_freq_brd = 0:1:eps.delta_freq - 1;
     pol.freq_brd = -2i * ryd * tmp_freq_brd ./ (tmp_freq_brd - eps.delta_freq);
     pol.freq = [pol.freq_grid, pol.freq_brd];
-    
-    % 初始化频率相关的存储结构
-    fprintf('Initializing full frequency-dependent calculation with %d frequencies\n', pol.nfreq);
-else
-    % 非频率依赖静态COHSEX计算：视为只有一个频率0的特例
-    pol.nfreq = 1;
-    pol.freq = 0;
-    fprintf('Initializing static calculation (frequency = 0)\n');
 end
 %%
 gr = fullbz(options, syms, true);
@@ -86,15 +78,17 @@ for iq = 1:sys.nkpts
         [fft_all, idx_all] = epsilon_prefft(wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, pol, fft_all, idx_all, use_gpu);
     end
 end
-
 %% Main loop
-% 对每个k点计算
+
 for iq = 1:sys.nkpts
+    fprintf('\nProcessing k-point %d/%d\n', iq, sys.nkpts);
+    
     qq = pol.qpt(iq,:);
     syms_qq = subgrp(qq, syms);
     [nrq, neq, indrk] = irrbz(syms_qq, gr);
     
     nmtx_current = pol.nmtx(iq);
+    fprintf('nmtx for current k-point: %d\n', nmtx_current);
     
     % 初始化 chi0 累加器
     if use_gpu
@@ -133,7 +127,6 @@ for iq = 1:sys.nkpts
             else
                 chi0_tmp = zeros(nmtx_current, nmtx_current);
             end
-            
             fprintf('  Irreducible k-point %d/%d...\n', ik, nrq);
             rk = gr.f(indrk(ik),:);
             [nstar, ~, rqs] = rqstar(syms_qq, rk);
@@ -176,19 +169,16 @@ for iq = 1:sys.nkpts
                 
                 for ic_idx = 1:no_c
                     ic = no_c_start + ic_idx - 1; % 转换为全局能带索引
-                    gme_temp = getm_epsilon_freq(iv, ic, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
                     
-                    for ifreq = 1:pol.nfreq
-                        freq = pol.freq(ifreq) / ryd;
-                        eden_temp(iv, ic_idx, ifreq) = get_eden(iv, ic, wfnkq, wfnk, ispin, options, freq, eps);
-                    end
+                    % 计算矩阵元
+                    gme_temp = getm_epsilon(iv, ic, wfnkq, wfnk, fft, idx, ispin, nspinor, options, use_gpu);
+                    
                     if save_mem
                         % 立即累加到 chi0
-                        chi0_tmp = chi0_tmp + conj(gme_temp) .* eden_temp(iv, ic_idx, :) * gme_temp.';
+                        chi0_tmp = chi0_tmp - conj(gme_temp) * gme_temp.';
                     else
                         % 存储数据（使用局部索引），用于后续使用矩阵乘法加速
                         gme_storage(:, iv, ic_idx, indrk(ik)) = gme_temp;
-                        eden_storage(iv, ic_idx, indrk(ik), :) = eden_temp(iv, ic_idx, :);
                     end
                     
                     % 处理简并k点
@@ -196,27 +186,24 @@ for iq = 1:sys.nkpts
                         for it = 2:nstar
                             gme_temp_degen = gme_temp(indt_cell{ik}{it});
                             if save_mem
-                                chi0_tmp = chi0_tmp + conj(gme_temp_degen) .* eden_temp(iv, ic_idx, :) * gme_temp_degen.';
+                                chi0_tmp = chi0_tmp - conj(gme_temp_degen) * gme_temp_degen.';
                             else
                                 k_degenerate = rqs(it, :);
                                 [~, ik_degenerate] = ismember(k_degenerate, gr.f, 'rows');
                                 if ik_degenerate > 0
                                     gme_storage(:, iv, ic_idx, ik_degenerate) = gme_temp_degen;
-                                    eden_storage(iv, ic_idx, ik_degenerate, :) = eden_temp(iv, ic_idx, :);
                                 end
                             end
                         end
                     end
                 end
             end
-            
             if save_mem
                 chi0_sum = chi0_sum + chi0_tmp; % Sum over k and spin
             end
         end
-        
         if ~save_mem
-            chi0_sum = chi0_sum + get_chi0(gme_storage, eden_storage); % Sum over k, band and spin
+            chi0_sum = chi0_sum + get_chi0(gme_storage); % Sum over k, band and spin
             clear gme_storage
         end
     end
@@ -241,27 +228,24 @@ for iq = 1:sys.nkpts
     end
     
     % 计算epsilon矩阵
-    for ifreq = 1:pol.nfreq
-        if use_gpu
-            coulg_gpu = gpuArray(coulg);
-            eps_tmp_gpu = eye(nmtx_current, 'gpuArray');
-            eps_tmp_gpu = eps_tmp_gpu - coulg_gpu .* chi0_sum;
-            eps_inv_gpu = inv(eps_tmp_gpu);
-            
-            % 存储结果
-            if use_gpu
-                eps_tmp{iq}(:,:,ifreq) = gather(eps_tmp_gpu);
-                eps_inv{iq}(:,:,ifreq) = gather(eps_inv_gpu);
-            else
-                eps_tmp{iq}(:,:,ifreq) = eps_tmp_gpu;
-                eps_inv{iq}(:,:,ifreq) = eps_inv_gpu;
-            end
-            clear chi0_sum coulg_gpu eps_tmp_gpu eps_inv_gpu;
-        else
-            eps_tmp{iq}(:,:,ifreq) = eye(nmtx_current);
-            eps_tmp{iq}(:,:,ifreq) = eps_tmp{iq}(:,:,ifreq) - coulg .* chi0_sum(:,:,ifreq);
-            eps_inv{iq}(:,:,ifreq) = inv(eps_tmp{iq}(:,:,ifreq));
-        end
+    if use_gpu
+        coulg_gpu = gpuArray(coulg);
+        eps_tmp_gpu = eye(nmtx_current, 'gpuArray');
+        eps_tmp_gpu = eps_tmp_gpu - coulg_gpu .* chi0_sum;
+        eps_inv_gpu = inv(eps_tmp_gpu);
+        
+        % 传输回CPU
+        eps_tmp{iq} = gather(eps_tmp_gpu);
+        eps_inv{iq} = gather(eps_inv_gpu);
+        
+        clear chi0_sum coulg_gpu eps_tmp_gpu eps_inv_gpu gme_storage;
+        wait(gpuDevice);
+    else
+        eps_tmp{iq} = eye(nmtx_current);
+        eps_tmp{iq} = eps_tmp{iq} - coulg .* chi0_sum;
+        eps_inv{iq} = inv(eps_tmp{iq});
+        
+        clear chi0_sum coulg gme_storage;
     end
 end
 
@@ -269,8 +253,6 @@ end
 eps.inv = eps_inv;
 eps.mtx = pol.mtx;
 eps.nmtx = pol.nmtx;
-eps.nfreq = pol.nfreq;
-eps.freq = pol.freq;
 
 % 最终清理
 if use_gpu
