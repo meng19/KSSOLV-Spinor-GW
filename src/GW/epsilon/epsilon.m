@@ -1,4 +1,5 @@
 function eps = epsilon(sys, options, syms, eps)
+eps = epsilon_set_defaults(eps);
 %% Initialize some value
 ryd = 13.6056923;
 nvbands = eps.nv;
@@ -176,7 +177,7 @@ for iq = 1:sys.nkpts
                 
                 for ic_idx = 1:no_c
                     ic = no_c_start + ic_idx - 1; % 转换为全局能带索引
-                    gme_temp = getm_epsilon_freq(iv, ic, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
+                    gme_temp = getm_epsilon(iv, ic, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
                     
                     for ifreq = 1:pol.nfreq
                         freq = pol.freq(ifreq) / ryd;

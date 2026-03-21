@@ -29,7 +29,6 @@ eps.coul_cutoff = 5; %coulomb truncation radius in epsilon, only work with spher
 eps.use_gpu = 0;
 eps.save_mem = 0;
 eps = epsilon(sys, options, syms, eps);
-% eps = epsilon_cohsex(sys, options, syms, eps);
 toc
 
 tic
@@ -46,8 +45,7 @@ sig.cd_int_method = 0;
 sig.coul_cut = 'cell_box_truncation';
 sig.coul_cutoff = 5; %coulomb truncation radius in sigma, only work with spherical_truncation
 sig.no_symmetries_q_grid = 0;
-sig.exact_static_ch = 1;
+sig.exact_static_ch = 0;
 sig.use_gpu = 0;
 sig = sigma(eps, sig, sys, options, syms);
-% sig = cohsex(eps, sig, sys, options, syms);
 toc

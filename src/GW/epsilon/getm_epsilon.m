@@ -1,4 +1,18 @@
-function gme = getm_epsilon_gpu(ivin, icin, wfnkq, wfnk, fft, idx, ispin, nspinor, options, use_gpu)
+function [gme, eden] = getm_epsilon_freq(ivin, icin, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu)
+% 频率依赖的矩阵元计算函数
+% 输入参数：
+%   ivin: 价带索引
+%   icin: 导带索引
+%   wfnkq: k+q点的波函数
+%   wfnk: k点的波函数
+%   fft: FFT网格信息
+%   idx: 索引信息
+%   ispin: 自旋索引
+%   nspinor: 自旋轨道数
+%   options: 选项参数
+%   freq: 频率值
+%   use_gpu: 是否使用GPU
+
 if use_gpu
     % GPU FFT优化
     persistent gpu_fft_initialized
@@ -43,16 +57,4 @@ end
 
 %% Sum over spinor components
 gme = sum(gme, 2);
-
-%% get eden and multiply
-eval = options.ev(ivin, wfnkq.ikq, ispin);
-econd = options.ev(icin, wfnk.ikq, ispin);
-eden = 1/sqrt(eval-econd);
-
-if use_gpu
-    eden_gpu = gpuArray(eden);
-    gme = gme * eden_gpu;
-else
-    gme = gme * eden;
-end
 end
