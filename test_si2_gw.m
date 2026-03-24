@@ -34,7 +34,7 @@ toc
 tic
 sig.nbnd = 10;
 sig.ndiag_min = 1;
-sig.ndiag_max = 10;
+sig.ndiag_max = 8;
 % sig.coul_cut = 'spherical_truncation';
 sig.freq_dep = 2;
 sig.freq_dep_method = 2;
@@ -45,7 +45,7 @@ sig.cd_int_method = 0;
 sig.coul_cut = 'cell_box_truncation';
 sig.coul_cutoff = 5; %coulomb truncation radius in sigma, only work with spherical_truncation
 sig.no_symmetries_q_grid = 0;
-sig.exact_static_ch = 0;
+sig.exact_static_ch = 1;
 sig.use_gpu = 0;
 sig = sigma(eps, sig, sys, options, syms);
 toc

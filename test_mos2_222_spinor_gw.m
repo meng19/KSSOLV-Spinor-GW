@@ -15,30 +15,35 @@ tic
 eps.nbnd = 29;
 eps.nv = options.nv;
 eps.nc = eps.nbnd - eps.nv;
-eps.freq_dep = 0;
-% eps.freq_dep = 2;
-% eps.freq_dep_method = 2;
-% eps.freq_cutoff = 200;
-% eps.delta_freq = 15;
-% eps.nfreq_imag = 15;
+% eps.freq_dep = 0;
+eps.freq_dep = 2;
+eps.freq_dep_method = 2;
+eps.freq_cutoff = 200;
+eps.delta_freq = 15;
+eps.nfreq_imag = 15;
 omega = 0;
 eta = 0;
 eps.cutoff = 10;
 eps.coul_cut = 'spherical_truncation';
 eps.coul_cutoff = 10;
-eps.use_gpu = 1;
+eps.use_gpu = 0;
 eps.save_mem = 1;
 eps = epsilon(sys, options, syms, eps);
-% eps = epsilon_cohsex(sys, options, syms, eps);
 toc
 
 tic
 sig.nbnd = 29;
 sig.ndiag_min = 1;
 sig.ndiag_max = 29;
+sig.freq_dep = 2;
+sig.freq_dep_method = 2;
+sig.freq_grid_shift = 2;
+sig.max_freq_eval = 2;
+sig.delta_freq_eval = 0.2;
+sig.cd_int_method = 0;
 sig.coul_cut = 'spherical_truncation';
 sig.coul_cutoff = 10;
-sig.no_symmetries_q_grid = 0;
+sig.no_symmetries_q_grid = 1;
 sig.exact_static_ch = 1;
 sig.use_gpu = 1;
 sig = sigma(eps, sig, sys, options, syms);

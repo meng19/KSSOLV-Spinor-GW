@@ -1,4 +1,4 @@
-function gme = getm_sigma_gpu(in, nn, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu)
+function gme = getm_sigma(in, nn, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu)
 if use_gpu
     % GPU FFT优化
     persistent gpu_fft_initialized

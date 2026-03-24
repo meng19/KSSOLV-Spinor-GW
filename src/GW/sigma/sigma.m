@@ -17,7 +17,7 @@ if use_gpu
     fprintf('Using GPU: %s\n', gpu_dev.Name);
 end
 
-ndiag = ndiag_max - ndiag_min;
+ndiag = ndiag_max - ndiag_min + 1;
 aqsch = cell(nbands, nspin);
 asx = zeros([ndiag sys.nkpts nspin]);
 ax = zeros([ndiag sys.nkpts nspin]);
@@ -101,10 +101,8 @@ for ik = 1:sig.nkn
         % 由于FFT格点仅与k, q有关，预计算信息
         idx_all = sigma_prefft(wfnkq_all{iq, ik}, wfnk_all{ik}, fbz.mtx{:, indrk(iq)}, iq, ik, sys, idx_all, use_gpu);
         
-        if sig.freq_dep == 0 %cohsex
-            % 如果计算exact_static_ch，由于格点相减仅与k, q有关，预计算信息
-            [igpp{iq, ik}, valid_indices{iq, ik}]= pre_exact_static_ch(fbz, gvec, indrk, iq, use_gpu);
-        end
+        % 如果计算exact_static_ch，由于格点相减仅与k, q有关，预计算信息
+        [igpp{iq, ik}, valid_indices{iq, ik}]= pre_exact_static_ch(fbz, gvec, indrk, iq, use_gpu);
     end
 end
 
@@ -228,7 +226,9 @@ for ispin = 1 : nspin
                     if sig.freq_dep == 0
                         [asx_loc, ach_loc] = sigma_cohsex(asx_loc, ach_loc, occ_kq(nn), aqs_cutoff, aqs_cutoff, eps_inv_I_coul);
                     elseif sig.freq_dep == 2
-                        [asx_loc, ach_loc, iw_lda] = sigma_fullfreq(asx_loc, ach_loc, in, nn, occ_kq(nn), options.ev, ispin, aqs_cutoff, aqs_cutoff, eps_inv_I_coul, sig);
+                        [asx_loc, ach_loc, achx_loc_nn(in, nn), omega, iw_lda] = sigma_fullfreq(asx_loc, ach_loc, in, nn, wfnk.ikq, wfnkq.ikq, occ_kq(nn), options.ev, ispin, aqs_cutoff, aqs_cutoff, eps_inv_I_coul, sig);
+                        omega_storage(in, ik, ispin, :) = omega;
+                        iw_lda_storage(in, ik, ispin) = iw_lda;
                     end
                 end
                 
@@ -237,12 +237,18 @@ for ispin = 1 : nspin
                 achtemp = achtemp + ach_loc * neq(iq);
                 
                 %% Calculate CH with exact ch correlation
-                if sig.exact_static_ch && sig.freq_dep == 0
+                if sig.exact_static_ch
                     if (indrk(iq) == 1) % Only for q==0
                         aqsch{in, ispin} = aqs{in, ispin};
                     end
-                    achx_loc = sigma_exact_ch(in, ispin, fbz, indrk, iq, aqsch, eps_inv_I_coul, sig, igpp{iq, ik}, valid_indices{iq, ik});
-                    achxtemp = achxtemp + sum(achx_loc,"all") * neq(iq);
+                    achx_loc = sigma_cohsex_exact_ch(in, ispin, fbz, indrk, iq, aqsch, eps_inv_I_coul, sig, igpp{iq, ik}, valid_indices{iq, ik});
+                    if sig.freq_dep == 0
+                        achxtemp = achxtemp + sum(achx_loc,"all") * neq(iq);
+                    elseif sig.freq_dep == 2
+                        achx_loc_nn(in, 1) = achx_loc_nn(in, 1) + 0.5 * 0.5 * sum(achx_loc,"all"); % 额外1/2？
+                        achx_loc_nn = achx_loc_nn * neq(iq);
+                        achxtemp = achxtemp + sum(achx_loc_nn(in, :),"all");
+                    end
                 end
                 
                 n_index = in - ndiag_min + 1;
@@ -255,25 +261,39 @@ for ispin = 1 : nspin
                     end
                 elseif sig.freq_dep == 2
                     asx(n_index,ik,ispin) = asxtemp(iw_lda);
+                    asx_freq{n_index,ik,ispin} = asxtemp;
                     ax(n_index,ik,ispin) = axtemp;
                     ach(n_index,ik,ispin) = achtemp(iw_lda);
+                    ach_freq{n_index,ik,ispin} = achtemp;
+                    if sig.exact_static_ch
+                        achx(n_index,ik,ispin) = achxtemp;
+                        achx_nn{n_index,ik,ispin} = achx_loc_nn;
+                    end
                 end
             end
         end
     end
-    
-    fprintf('Finalizing calculations...\n');
-    
-    if sig.exact_static_ch
+end
+fprintf('Finalizing calculations...\n');
+
+if sig.exact_static_ch
+    if sig.freq_dep == 0
         sig.cor = real(asx + achx) * ryd;
         sig.sig = real(asx + ax + achx) * ryd;
-    else
-        sig.cor = real(asx + ach) * ryd;
-        sig.sig = real(asx + ax + ach) * ryd;
+    elseif sig.freq_dep == 2
+        sig.cor = real(asx + ach + achx) * ryd;
+        sig.sig = real(asx + ax + ach + achx) * ryd;
     end
-    
-    emf = ryd * options.ev;
-    sig = quasi_energy(nspin, ndiag_min, ndiag_max, emf, sys.vxc, sig);
-    
-    fprintf('Calculation completed.\n');
+else
+    sig.cor = real(asx + ach) * ryd;
+    sig.sig = real(asx + ax + ach) * ryd;
+end
+
+emf = ryd * options.ev;
+sig = quasi_energy(nspin, ndiag_min, ndiag_max, emf, sys.vxc, sig);
+if sig.freq_dep == 2
+    sig = get_eqp1(nspin, ndiag_min, ndiag_max, emf, omega_storage, iw_lda_storage, asx_freq, ach_freq, achx, ax, sig);
+end
+
+fprintf('Calculation completed.\n');
 end

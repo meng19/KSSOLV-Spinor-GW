@@ -185,7 +185,7 @@ for iq = 1:sys.nkpts
                     end
                     if save_mem
                         % 立即累加到 chi0
-                        chi0_tmp = chi0_tmp + conj(gme_temp) .* eden_temp(iv, ic_idx, :) * gme_temp.';
+                        chi0_tmp = chi0_tmp + conj(gme_temp) * gme_temp.' .* eden_temp(iv, ic_idx, :);
                     else
                         % 存储数据（使用局部索引），用于后续使用矩阵乘法加速
                         gme_storage(:, iv, ic_idx, indrk(ik)) = gme_temp;
@@ -197,7 +197,7 @@ for iq = 1:sys.nkpts
                         for it = 2:nstar
                             gme_temp_degen = gme_temp(indt_cell{ik}{it});
                             if save_mem
-                                chi0_tmp = chi0_tmp + conj(gme_temp_degen) .* eden_temp(iv, ic_idx, :) * gme_temp_degen.';
+                                chi0_tmp = chi0_tmp + conj(gme_temp_degen) * gme_temp_degen.' .* eden_temp(iv, ic_idx, :);
                             else
                                 k_degenerate = rqs(it, :);
                                 [~, ik_degenerate] = ismember(k_degenerate, gr.f, 'rows');
@@ -245,19 +245,10 @@ for iq = 1:sys.nkpts
     for ifreq = 1:pol.nfreq
         if use_gpu
             coulg_gpu = gpuArray(coulg);
-            eps_tmp_gpu = eye(nmtx_current, 'gpuArray');
-            eps_tmp_gpu = eps_tmp_gpu - coulg_gpu .* chi0_sum;
-            eps_inv_gpu = inv(eps_tmp_gpu);
-            
-            % 存储结果
-            if use_gpu
-                eps_tmp{iq}(:,:,ifreq) = gather(eps_tmp_gpu);
-                eps_inv{iq}(:,:,ifreq) = gather(eps_inv_gpu);
-            else
-                eps_tmp{iq}(:,:,ifreq) = eps_tmp_gpu;
-                eps_inv{iq}(:,:,ifreq) = eps_inv_gpu;
-            end
-            clear chi0_sum coulg_gpu eps_tmp_gpu eps_inv_gpu;
+            eps_tmp_gpu{iq}(:,:,ifreq) = eye(nmtx_current, 'gpuArray');
+            eps_tmp_gpu{iq}(:,:,ifreq) = eps_tmp_gpu{iq}(:,:,ifreq) - coulg_gpu .* chi0_sum(:,:,ifreq);
+            eps_inv_gpu{iq}(:,:,ifreq) = inv(eps_tmp_gpu{iq}(:,:,ifreq));
+            eps_inv{iq}(:,:,ifreq) = gather(eps_inv_gpu{iq}(:,:,ifreq));
         else
             eps_tmp{iq}(:,:,ifreq) = eye(nmtx_current);
             eps_tmp{iq}(:,:,ifreq) = eps_tmp{iq}(:,:,ifreq) - coulg .* chi0_sum(:,:,ifreq);
