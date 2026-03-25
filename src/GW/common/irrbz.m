@@ -5,10 +5,10 @@ for ik=1:gr.nf
     found = 0;
     for it=1:syms.ntranq
         qk=gr.f(ik,:)*syms.mtrx{syms.indsub(it),:};
-        [qk,kg]=krange(qk,1e-9);
+        [qk,kg]=krange(qk,1e-6);
         %% compare to other k-points in the irr. BZ with respect to qvec
         for irq=1:nrq
-            if all(abs(fk(indrk(irq),:)-qk) < 1e-9)
+            if all(abs(fk(indrk(irq),:)-qk) < 1e-6)
                 neq(irq) = neq(irq) + 1;
                 found = 1;
                 break

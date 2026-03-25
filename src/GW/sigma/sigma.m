@@ -111,18 +111,18 @@ grid_size = [sys.n1, sys.n2, sys.n3];
 
 if use_gpu
     try
-        fft.Nfft1 = gpuArray.zeros(grid_size, 'single');
-        fft.Nfft2 = gpuArray.zeros(grid_size, 'single');
+        fft.Nfft1 = gpuArray.zeros(grid_size);
+        fft.Nfft2 = gpuArray.zeros(grid_size);
         use_gpu = true;
     catch
         warning('GPU memory insufficient for FFT grids. Falling back to CPU.');
-        fft.Nfft1 = zeros(grid_size, 'single');
-        fft.Nfft2 = zeros(grid_size, 'single');
+        fft.Nfft1 = zeros(grid_size);
+        fft.Nfft2 = zeros(grid_size);
         use_gpu = false;
     end
 else
-    fft.Nfft1 = zeros(grid_size, 'single');
-    fft.Nfft2 = zeros(grid_size, 'single');
+    fft.Nfft1 = zeros(grid_size);
+    fft.Nfft2 = zeros(grid_size);
 end
 fft.size = prod(grid_size);
 

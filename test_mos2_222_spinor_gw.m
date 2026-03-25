@@ -27,13 +27,13 @@ eps.cutoff = 10;
 eps.coul_cut = 'spherical_truncation';
 eps.coul_cutoff = 10;
 eps.use_gpu = 0;
-eps.save_mem = 1;
+eps.save_mem = 0;
 eps = epsilon(sys, options, syms, eps);
 toc
 
 tic
 sig.nbnd = 29;
-sig.ndiag_min = 1;
+sig.ndiag_min = 29;
 sig.ndiag_max = 29;
 sig.freq_dep = 2;
 sig.freq_dep_method = 2;
@@ -44,7 +44,7 @@ sig.cd_int_method = 0;
 sig.coul_cut = 'spherical_truncation';
 sig.coul_cutoff = 10;
 sig.no_symmetries_q_grid = 1;
-sig.exact_static_ch = 1;
-sig.use_gpu = 1;
+sig.exact_static_ch = 0;
+sig.use_gpu = 0;
 sig = sigma(eps, sig, sys, options, syms);
 toc

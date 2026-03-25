@@ -6,10 +6,10 @@ gr.nf=0;
 for ir=1:gr.nr
     for it=1:syms.ntran
         tmpf=gr.r(ir,:)*syms.mtrx{it,1};
-        [tmpf, gpt]=krange(tmpf,1e-9);
+        [tmpf, gpt]=krange(tmpf,1e-6);
         found = 0;
         for ifull=1:gr.nf
-            if all(abs(tmpf-fk(ifull,:)) < 1e-9)
+            if all(abs(tmpf-fk(ifull,:)) < 1e-6)
                 found = 1;
                 break
             end

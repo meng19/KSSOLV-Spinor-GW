@@ -29,7 +29,7 @@ iw        = 0 : nfreqeval-1;
 omega     = freq0 + iw * sig.delta_freq_eval;
 wxi       = omega - e_n1kq;           % ω_i - ε_{n'k+q}
 wxi = wxi';
-wxi(wxi == 0) = 1e-6; % 避免被除
+wxi(wxi == 0) = 1e-6;
 
 % 找到最接近 e_nk 的网格点（常用于对齐 LDA 能量）
 [~, iw_lda] = min(abs(omega - e_nk));
@@ -47,7 +47,7 @@ sint = zeros(nfreqeval, 1) + 0i;   % 虚频率积分贡献
 % 1. 静态 COH 贡献（如果开启 exact_ch）
 % ───────────────────────────────────────────────
 if isfield(sig, 'exact_static_ch') && sig.exact_static_ch == 1
-%     achx_loc = -0.5 * sum(sum(aqsm .* aqsn' .* eps_inv_I_coul(:,:,1) * 0.5));
+    %     achx_loc = -0.5 * sum(sum(aqsm .* aqsn' .* eps_inv_I_coul(:,:,1) * 0.5));
     achx_loc = -0.5 * sum(sum(aqsmn .* eps_inv_I_coul(:,:,1) * 0.5));
 else
     achx_loc = 0;
@@ -56,51 +56,6 @@ end
 % ───────────────────────────────────────────────
 % 2. Residue 部分（实频率轴上的极点贡献）
 % ───────────────────────────────────────────────
-% =======老版本slow=======
-if 0
-for iw = 1:nfreqeval
-    wx = wxi(iw);
-    if (wx >=0) == (occ_kq > 0)
-        continue
-    end
-    if wx >= 0
-        occ_sign = 1;
-    else
-        occ_sign = -1;
-    end
-    wx_abs = abs(wx);
-    
-%     找到 wx 所在的频率区间
-    ifreq = 0;
-    for k = 1:nfreq_real-1
-        if wx_abs >= sig.freq_integral(k) && wx_abs < sig.freq_integral(k+1)
-            ifreq = k;
-            break;
-        end
-    end
-    if ifreq == 0
-        ifreq = nfreq_real - 1;  % 超出范围时取最后一个区间
-    end
-    
-%     线性插值 ε^{-1}(ω)
-    if nfreq_real > 1
-        df    = sig.freq_integral(ifreq+1) - sig.freq_integral(ifreq);
-        fact1 = (sig.freq_integral(ifreq+1) - wx_abs) / df;
-        fact2 = (wx_abs - sig.freq_integral(ifreq))   / df;
-        eps_inv_I_coul_freq = fact1 * eps_inv_I_coul(:,:,ifreq) + fact2 * eps_inv_I_coul(:,:,ifreq+1);
-    else
-        eps_inv_I_coul_freq = eps_inv_I_coul(:,:,1);
-    end
-    
-%     计算 Σ_res ~ Σ_G G' <n| e^{iGr} |n'> ε^{-1}_{GG'}(ω) <n'| e^{-iG'r} |n> v_G
-%     sres_omega = sum(sum(aqsm .* aqsn' .* eps_inv_I_coul_freq));
-    sres_omega = sum(sum(aqsmn .* eps_inv_I_coul_freq));
-    
-    sres(iw) = occ_sign * sres_omega;
-end
-end
-
-% ========新版本==========
 % 判断哪些 ω_i 需要 residue 贡献
 need_res = ((wxi >= 0) ~= (occ_kq > 0));
 idx_need = find(need_res);
@@ -122,7 +77,7 @@ if ~isempty(idx_need)
         df     = f_high - f_low;
         fact2  = (wx_abs_need - f_low) ./ df;
         fact1  = 1 - fact2;
-
+        
         sres_omega_need = zeros(length(idx_need), 1);
         
         for i = 1:length(idx_need)
@@ -132,11 +87,11 @@ if ~isempty(idx_need)
             
             % 向量内积
             sres_omega_need(i) = fact1(i) * (M_flat.' * E_k(:)) + ...
-                                 fact2(i) * (M_flat.' * E_kp(:));
+                fact2(i) * (M_flat.' * E_kp(:));
         end
     end
     
-    % 4. 填回 sres（只更新需要的点）
+    % 填回 sres（只更新需要的点）
     occ_sign_vec = sign(wxi(idx_need));
     occ_sign_vec(occ_sign_vec == 0) = 1;
     sres(idx_need) = occ_sign_vec .* sres_omega_need;
