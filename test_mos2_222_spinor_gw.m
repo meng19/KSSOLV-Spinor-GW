@@ -26,8 +26,9 @@ eta = 0;
 eps.cutoff = 10;
 eps.coul_cut = 'spherical_truncation';
 eps.coul_cutoff = 10;
-eps.use_gpu = 0;
+eps.use_gpu = 1;
 eps.save_mem = 0;
+eps.precompute_wav = 0;
 eps = epsilon(sys, options, syms, eps);
 toc
 
@@ -45,6 +46,7 @@ sig.coul_cut = 'spherical_truncation';
 sig.coul_cutoff = 10;
 sig.no_symmetries_q_grid = 1;
 sig.exact_static_ch = 0;
-sig.use_gpu = 0;
+sig.use_gpu = 1;
+sig.precompute_wav = 0;
 sig = sigma(eps, sig, sys, options, syms);
 toc

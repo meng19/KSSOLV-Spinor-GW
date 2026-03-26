@@ -1,4 +1,4 @@
-function [gme, eden] = getm_epsilon_freq(ivin, icin, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu)
+function [gme, eden] = getm_epsilon(ivin, icin, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu)
 % 频率依赖的矩阵元计算函数
 % 输入参数：
 %   ivin: 价带索引

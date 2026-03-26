@@ -65,27 +65,32 @@ eps_tmp = cell(sys.nkpts, 1);
 eps_inv = cell(sys.nkpts, 1);
 fact = 4 / (gr.nf * sys.vol * nspin * nspinor);
 
+precompute_wav = eps.precompute_wav;
 %% Precompute wavefunctions for all k-points and spins
-fprintf('Precomputing wavefunctions...\n');
-idx_all.k = cell(sys.nkpts, gr.nf);
-idx_all.q = cell(sys.nkpts, 1);
-idx_all.kq = cell(sys.nkpts, gr.nf); % Dimensions: [iq, ik]
-fft_all = cell(sys.nkpts, 1);
-
-for iq = 1:sys.nkpts
-    qq = pol.qpt(iq,:);
-    syms_qq = subgrp(qq, syms);
-    [nrq, neq, indrk] = irrbz(syms_qq, gr);
-    for ik = 1:nrq
-        rk = gr.f(indrk(ik),:);
-        wfnk_all{iq, ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
-        
-        rkq = rk + qq;
-        wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
-        
-        % 由于FFT格点仅与k, q有关，预计算信息
-        [fft_all, idx_all] = epsilon_prefft(wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, pol, fft_all, idx_all, use_gpu);
+if precompute_wav
+    fprintf('Precomputing wavefunctions...\n');
+    idx_all.k = cell(sys.nkpts, gr.nf);
+    idx_all.q = cell(sys.nkpts, 1);
+    idx_all.kq = cell(sys.nkpts, gr.nf); % Dimensions: [iq, ik]
+    fft_all = cell(sys.nkpts, 1);
+    
+    for iq = 1:sys.nkpts
+        qq = pol.qpt(iq,:);
+        syms_qq = subgrp(qq, syms);
+        [nrq, neq, indrk] = irrbz(syms_qq, gr);
+        for ik = 1:nrq
+            rk = gr.f(indrk(ik),:);
+            wfnk_all{iq, ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            
+            rkq = rk + qq;
+            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            
+            % 由于FFT格点仅与k, q有关，预计算信息
+            [fft_all, idx_all] = epsilon_prefft(wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, pol, fft_all, idx_all, use_gpu);
+        end
     end
+else
+    fprintf('No precomputation of wav to save memory.\n');
 end
 
 %% Main loop
@@ -139,15 +144,22 @@ for iq = 1:sys.nkpts
             rk = gr.f(indrk(ik),:);
             [nstar, ~, rqs] = rqstar(syms_qq, rk);
             
-            % 读取波函数
-            wfnk = wfnk_all{iq, ik};
-            wfnkq = wfnkq_all{iq, ik};
-            
-            % 读取FFT网格
-            idx.k = idx_all.k{iq, ik};
-            idx.q = idx_all.q{iq};
-            idx.kq = idx_all.kq{iq, ik};
-            fft = fft_all{iq};
+            if precompute_wav
+                % 读取波函数
+                wfnk = wfnk_all{iq, ik};
+                wfnkq = wfnkq_all{iq, ik};
+                
+                % 读取FFT网格
+                idx.k = idx_all.k{iq, ik};
+                idx.q = idx_all.q{iq};
+                idx.kq = idx_all.kq{iq, ik};
+                fft = fft_all{iq};
+            else
+                wfnk  = genwf(rk,  gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+                rkq   = rk + qq;
+                wfnkq = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+                [fft, idx] = epsilon_prefft(wfnkq, wfnk, iq, ik, pol, [], [], use_gpu);
+            end
             
             % 获取能带信息
             occ_vkq = get_occ(options, wfnkq.ikq, ispin);
@@ -242,18 +254,32 @@ for iq = 1:sys.nkpts
     end
     
     % 计算epsilon矩阵
-    for ifreq = 1:pol.nfreq
-        if use_gpu
-            coulg_gpu = gpuArray(coulg);
-            eps_tmp_gpu{iq}(:,:,ifreq) = eye(nmtx_current, 'gpuArray');
-            eps_tmp_gpu{iq}(:,:,ifreq) = eps_tmp_gpu{iq}(:,:,ifreq) - coulg_gpu .* chi0_sum(:,:,ifreq);
-            eps_inv_gpu{iq}(:,:,ifreq) = inv(eps_tmp_gpu{iq}(:,:,ifreq));
-            eps_inv{iq}(:,:,ifreq) = gather(eps_inv_gpu{iq}(:,:,ifreq));
+    if use_gpu
+        if ~isa(coulg, 'gpuArray')
+            coulg_gpu = gpuArray(coulg(:));
         else
-            eps_tmp{iq}(:,:,ifreq) = eye(nmtx_current);
-            eps_tmp{iq}(:,:,ifreq) = eps_tmp{iq}(:,:,ifreq) - coulg .* chi0_sum(:,:,ifreq);
-            eps_inv{iq}(:,:,ifreq) = inv(eps_tmp{iq}(:,:,ifreq));
+            coulg_gpu = coulg(:);
         end
+        
+        n  = nmtx_current;
+        nf = pol.nfreq;
+        
+        I_gpu = eye(n, 'gpuArray');
+        eps_tmp_gpu = repmat(I_gpu, 1, 1, nf);
+        eps_tmp_gpu = eps_tmp_gpu - bsxfun(@times, coulg_gpu, chi0_sum);
+        % 备选写法（效果类似）：
+        % eps_tmp_gpu = eps_tmp_gpu - pagemtimes(coulg_gpu, chi0_sum);
+        eps_inv_gpu = pagefun(@inv, eps_tmp_gpu);
+%         eps_inv_gpu = pageinv(eps_tmp_gpu);
+        eps_inv{iq} = gather(eps_inv_gpu);
+        clear eps_tmp_gpu;
+    else
+        n  = nmtx_current;
+        nf = pol.nfreq;
+        I3d = repmat(eye(n), 1, 1, nf);
+        eps_tmp = I3d - bsxfun(@times, coulg(:), chi0_sum);
+        eps_inv{iq} = pagefun(@inv, eps_tmp);
+%         eps_inv{iq} = pageinv(eps_tmp);
     end
 end
 

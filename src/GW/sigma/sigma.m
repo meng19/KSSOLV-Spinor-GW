@@ -76,34 +76,39 @@ for ik = 1 : gr.nf
     eps_inv_fbz{ik} = eps.inv{gr.indr(ik)}(indt, indt, :);
 end
 
-% Precompute wavefunctions for all k-points and spins
-fprintf('Precomputing wavefunctions...\n');
-idx_all.k = cell(sig.nkn, 1);
-idx_all.q = cell(gr.nf, sig.nkn);
-idx_all.kq = cell(gr.nf, sig.nkn); % Dimensions: [iq, ik]
-
-for ik = 1:sig.nkn
-    rk = sig.qpt(ik, :);
-    syms_rk = subgrp(rk, syms);
-    [nrk, neq, indrk] = irrbz(syms_rk, gr);
-    if no_symmetries_q_grid
-        nrk = gr.nf;
-        indrk = (1:nrk);
-        neq = ones(1, nrk);
+precompute_wav = sig.precompute_wav;
+if precompute_wav
+    % Precompute wavefunctions for all k-points and spins
+    fprintf('Precomputing wavefunctions...\n');
+    idx_all.k = cell(sig.nkn, 1);
+    idx_all.q = cell(gr.nf, sig.nkn);
+    idx_all.kq = cell(gr.nf, sig.nkn); % Dimensions: [iq, ik]
+    
+    for ik = 1:sig.nkn
+        rk = sig.qpt(ik, :);
+        syms_rk = subgrp(rk, syms);
+        [nrk, neq, indrk] = irrbz(syms_rk, gr);
+        if no_symmetries_q_grid
+            nrk = gr.nf;
+            indrk = (1:nrk);
+            neq = ones(1, nrk);
+        end
+        for iq = 1:nrk
+            qq = gr.f(indrk(iq), :);
+            wfnk_all{ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            
+            rkq = rk - qq;
+            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            
+            % 由于FFT格点仅与k, q有关，预计算信息
+            idx_all = sigma_prefft(wfnkq_all{iq, ik}, wfnk_all{ik}, fbz.mtx{:, indrk(iq)}, iq, ik, sys, idx_all, use_gpu);
+            
+            % 如果计算exact_static_ch，由于格点相减仅与k, q有关，预计算信息
+            [igpp{iq, ik}, valid_indices{iq, ik}]= pre_exact_static_ch(fbz, gvec, indrk, iq, use_gpu);
+        end
     end
-    for iq = 1:nrk
-        qq = gr.f(indrk(iq), :);
-        wfnk_all{ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
-        
-        rkq = rk - qq;
-        wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
-        
-        % 由于FFT格点仅与k, q有关，预计算信息
-        idx_all = sigma_prefft(wfnkq_all{iq, ik}, wfnk_all{ik}, fbz.mtx{:, indrk(iq)}, iq, ik, sys, idx_all, use_gpu);
-        
-        % 如果计算exact_static_ch，由于格点相减仅与k, q有关，预计算信息
-        [igpp{iq, ik}, valid_indices{iq, ik}]= pre_exact_static_ch(fbz, gvec, indrk, iq, use_gpu);
-    end
+else
+    fprintf('No precomputation of wav to save memory.\n');
 end
 
 %% set up fft_grid
@@ -155,8 +160,12 @@ for ispin = 1 : nspin
             rk = sig.qpt(ik, :);
             syms_rk = subgrp(rk, syms);
             [nrk, neq, indrk] = irrbz(syms_rk, gr);
-            % Use precomputed wfnk
-            wfnk = wfnk_all{ik};
+            if precompute_wav
+                % Use precomputed wfnk
+                wfnk = wfnk_all{ik};
+            else
+                wfnk = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            end
             if no_symmetries_q_grid
                 nrk = gr.nf;
                 indrk = (1:nrk);
@@ -203,13 +212,25 @@ for ispin = 1 : nspin
                     coulg_cutoff   = gpuArray(coulg_cutoff);
                 end
                 
-                %% get wavefunction of k-q from precomputed data
-                wfnkq = wfnkq_all{iq, ik};
+                if precompute_wav
+                    %% get wavefunction of k-q from precomputed data
+                    wfnkq = wfnkq_all{iq, ik};
+                else
+                    rkq = rk - qq;
+                    wfnkq = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+                end
                 %% Sum over band nn
                 occ_kq = get_occ(options, wfnkq.ikq, ispin);
-                idx.k = idx_all.k{ik};
-                idx.q = idx_all.q{iq, ik};
-                idx.kq = idx_all.kq{iq, ik};
+                if precompute_wav
+                    idx.k  = idx_all.k{ik};
+                    idx.q  = idx_all.q{iq, ik};
+                    idx.kq = idx_all.kq{iq, ik};
+                    igpp_tmp = igpp{iq, ik};
+                    valid_indices_tmp = valid_indices{iq, ik};
+                else
+                    idx = sigma_prefft(wfnkq, wfnk, fbz.mtx{:, indrk(iq)}, iq, ik, sys, [], use_gpu);
+                    [igpp_tmp, valid_indices_tmp]= pre_exact_static_ch(fbz, gvec, indrk, iq, use_gpu);
+                end
                 
                 asx_loc = 0;
                 ax_loc  = 0;
@@ -241,7 +262,7 @@ for ispin = 1 : nspin
                     if (indrk(iq) == 1) % Only for q==0
                         aqsch{in, ispin} = aqs{in, ispin};
                     end
-                    achx_loc = sigma_cohsex_exact_ch(in, ispin, fbz, indrk, iq, aqsch, eps_inv_I_coul, sig, igpp{iq, ik}, valid_indices{iq, ik});
+                    achx_loc = sigma_cohsex_exact_ch(in, ispin, fbz, indrk, iq, aqsch, eps_inv_I_coul, sig, igpp_tmp, valid_indices_tmp);
                     if sig.freq_dep == 0
                         achxtemp = achxtemp + sum(achx_loc,"all") * neq(iq);
                     elseif sig.freq_dep == 2
