@@ -33,6 +33,7 @@ simulinktemp/
 *.mat
 *.fig
 *.mldatx
+*.bin
 
 # 打包文件
 *.mlappinstall

@@ -115,7 +115,9 @@ if nspinor == 2 && itqq ~= 1
                 % Use CPU matrix multiplication for all bands
                 rotated_spinor_perm = zeros(nmtx, nbnd, 2);
                 for iband = 1:nbnd
-                    rotated_spinor_perm(:, iband, :) = reshape(spinor_combined(:, iband, :) * umtrx, [nmtx, 1, 2]);
+                    current_spinor = squeeze(spinor_combined(:, iband, :));
+                    rotated_spinor = current_spinor * umtrx;
+                    rotated_spinor_perm(:, iband, :) = rotated_spinor;
                 end
             end
         else
