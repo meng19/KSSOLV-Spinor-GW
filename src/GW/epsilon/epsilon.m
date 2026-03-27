@@ -30,8 +30,8 @@ if eps.freq_dep == 2 && eps.freq_dep_method == 2
     pol.nfreq_rel = fix(eps.freq_cutoff/eps.delta_freq) + 1;
     pol.nfreq = pol.nfreq_rel + eps.nfreq_imag;
     pol.freq_grid = 0:eps.delta_freq:eps.freq_cutoff;
-    tmp_freq_brd = 0:1:eps.delta_freq - 1;
-    pol.freq_brd = -2i * ryd * tmp_freq_brd ./ (tmp_freq_brd - eps.delta_freq);
+    tmp_freq_brd = 0:1:eps.nfreq_imag - 1;
+    pol.freq_brd = -2i * ryd * tmp_freq_brd ./ (tmp_freq_brd - eps.nfreq_imag);
     pol.freq = [pol.freq_grid, pol.freq_brd];
     
     % 初始化频率相关的存储结构
@@ -80,10 +80,10 @@ if precompute_wav
         [nrq, neq, indrk] = irrbz(syms_qq, gr);
         for ik = 1:nrq
             rk = gr.f(indrk(ik),:);
-            wfnk_all{iq, ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            wfnk_all{iq, ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             
             rkq = rk + qq;
-            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             
             % 由于FFT格点仅与k, q有关，预计算信息
             [fft_all, idx_all] = epsilon_prefft(wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, pol, fft_all, idx_all, use_gpu);
@@ -155,9 +155,9 @@ for iq = 1:sys.nkpts
                 idx.kq = idx_all.kq{iq, ik};
                 fft = fft_all{iq};
             else
-                wfnk  = genwf(rk,  gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+                wfnk  = genwf(rk,  gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
                 rkq   = rk + qq;
-                wfnkq = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+                wfnkq = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
                 [fft, idx] = epsilon_prefft(wfnkq, wfnk, iq, ik, pol, [], [], use_gpu);
             end
             
@@ -278,7 +278,12 @@ for iq = 1:sys.nkpts
         nf = pol.nfreq;
         I3d = repmat(eye(n), 1, 1, nf);
         eps_tmp = I3d - bsxfun(@times, coulg(:), chi0_sum);
-        eps_inv{iq} = pagefun(@inv, eps_tmp);
+        % 预分配
+        eps_inv_cell = cell(1, size(eps_tmp, 3));
+        for k = 1:size(eps_tmp, 3)
+            eps_inv_cell{k} = inv(eps_tmp(:,:,k));
+        end
+        eps_inv{iq} = cat(3, eps_inv_cell{:});
 %         eps_inv{iq} = pageinv(eps_tmp);
     end
 end
@@ -295,5 +300,5 @@ if use_gpu
     reset(gpuDevice);
 end
 
-fprintf('Calculation completed successfully.\n');
+fprintf('Calculation of epsilon completed successfully.\n');
 end

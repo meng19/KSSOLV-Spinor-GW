@@ -1,4 +1,4 @@
-function wfnkq = genwf_gpu(rkq, gr, gvec, syms, sys, options, cutoff, use_gpu)
+function wfnkq = genwf(rkq, gr, gvec, syms, sys, options, cutoff, nbands, use_gpu)
 % Check if GPU is requested and available
 if use_gpu
     try
@@ -16,7 +16,6 @@ end
 % Precompute frequently used values
 nspin = sys.nspin;
 nspinor = sys.nspinor;
-nbnd = sys.nbnd;
 
 [ikrkq, itqq, kgqq] = find_kpt_match(gr, syms, rkq);
 [ekin, isrtc_kq] = sortrx(rkq, gvec.ng, gvec.mill, sys);
@@ -44,7 +43,7 @@ wavefuncell_ikrkq = options.X0.wavefuncell(ikrkq, :);
 
 % Process all spin and spinor components
 for ispin = 1:nspin
-    wavefunc_ispin = wavefuncell_ikrkq{ispin}.psi;
+    wavefunc_ispin = wavefuncell_ikrkq{ispin}.psi(:,1:nbands);
     
     for ispinor = 1:nspinor
         % Calculate indices for this spinor component
@@ -113,8 +112,8 @@ if nspinor == 2 && itqq ~= 1
                 % Fall back to CPU if GPU batch operation fails
                 use_gpu_actual = false;
                 % Use CPU matrix multiplication for all bands
-                rotated_spinor_perm = zeros(nmtx, nbnd, 2);
-                for iband = 1:nbnd
+                rotated_spinor_perm = zeros(nmtx, nbands, 2);
+                for iband = 1:nbands
                     current_spinor = squeeze(spinor_combined(:, iband, :));
                     rotated_spinor = current_spinor * umtrx;
                     rotated_spinor_perm(:, iband, :) = rotated_spinor;
@@ -123,13 +122,13 @@ if nspinor == 2 && itqq ~= 1
         else
             % CPU version: process all bands at once using matrix operations
             % Reshape to [nmtx * nbnd, 2] for batch multiplication
-            spinor_reshaped = reshape(spinor_combined, [nmtx * nbnd, 2]);
+            spinor_reshaped = reshape(spinor_combined, [nmtx * nbands, 2]);
             
             % Apply rotation to all bands
             rotated_reshaped = spinor_reshaped * umtrx;
             
             % Reshape back to original dimensions
-            rotated_spinor_perm = reshape(rotated_reshaped, [nmtx, nbnd, 2]);
+            rotated_spinor_perm = reshape(rotated_reshaped, [nmtx, nbands, 2]);
         end
         
         % Split back into spinor components

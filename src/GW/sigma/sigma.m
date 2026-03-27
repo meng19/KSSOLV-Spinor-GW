@@ -32,7 +32,7 @@ sig.nkn = sys.nkpts;
 % 添加Full frequency支持
 if sig.freq_dep == 2 && sig.freq_dep_method == 2
     if sig.freq_grid_shift == 2
-        sig.nfreq_grid = 2 * fix(sig.max_freq_eval/sig.delta_freq_eval) + 1;
+        sig.nfreq_grid = 2 * fix(sig.max_freq_eval/sig.delta_freq_eval) + 1; % For Residue of Σ_CH
         sig.freq_grid = 0:sig.delta_freq_eval:2*sig.max_freq_eval;
     end
     sig.nfreq_integral = eps.nfreq; % For integral of Σ_CH
@@ -95,10 +95,10 @@ if precompute_wav
         end
         for iq = 1:nrk
             qq = gr.f(indrk(iq), :);
-            wfnk_all{ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            wfnk_all{ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             
             rkq = rk - qq;
-            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             
             % 由于FFT格点仅与k, q有关，预计算信息
             idx_all = sigma_prefft(wfnkq_all{iq, ik}, wfnk_all{ik}, fbz.mtx{:, indrk(iq)}, iq, ik, sys, idx_all, use_gpu);
@@ -164,7 +164,7 @@ for ispin = 1 : nspin
                 % Use precomputed wfnk
                 wfnk = wfnk_all{ik};
             else
-                wfnk = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+                wfnk = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             end
             if no_symmetries_q_grid
                 nrk = gr.nf;
@@ -217,7 +217,7 @@ for ispin = 1 : nspin
                     wfnkq = wfnkq_all{iq, ik};
                 else
                     rkq = rk - qq;
-                    wfnkq = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, use_gpu);
+                    wfnkq = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
                 end
                 %% Sum over band nn
                 occ_kq = get_occ(options, wfnkq.ikq, ispin);

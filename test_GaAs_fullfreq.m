@@ -47,7 +47,7 @@ sig.coul_cut = 'spherical_truncation';
 sig.coul_cutoff = 5; %coulomb truncation radius in sigma
 sig.no_symmetries_q_grid = 0;
 sig.exact_static_ch = 1;
-sig.use_gpu = 0;
+sig.use_gpu = 1;
 sig.precompute_wav = 0;
 sig = sigma(eps, sig, sys, options, syms);
 
