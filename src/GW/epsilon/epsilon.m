@@ -66,6 +66,7 @@ eps_inv = cell(sys.nkpts, 1);
 fact = 4 / (gr.nf * sys.vol * nspin * nspinor);
 
 precompute_wav = eps.precompute_wav;
+
 %% Precompute wavefunctions for all k-points and spins
 if precompute_wav
     fprintf('Precomputing wavefunctions...\n');
@@ -74,11 +75,24 @@ if precompute_wav
     idx_all.kq = cell(sys.nkpts, gr.nf); % Dimensions: [iq, ik]
     fft_all = cell(sys.nkpts, 1);
     
+    % 计算预计算总数
+    precompute_total = 0;
+    for iq = 1:sys.nkpts
+        qq = pol.qpt(iq,:);
+        syms_qq = subgrp(qq, syms);
+        [nrq, neq, indrk] = irrbz(syms_qq, gr);
+        precompute_total = precompute_total + nrq;
+    end
+    
+    precompute_count = 0;
     for iq = 1:sys.nkpts
         qq = pol.qpt(iq,:);
         syms_qq = subgrp(qq, syms);
         [nrq, neq, indrk] = irrbz(syms_qq, gr);
         for ik = 1:nrq
+            precompute_count = precompute_count + 1;
+            print_progress(precompute_count, precompute_total, 'Message', 'Precompute WFN', 'Task', 'epsilon_precompute');
+            
             rk = gr.f(indrk(ik),:);
             wfnk_all{iq, ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             
@@ -89,12 +103,15 @@ if precompute_wav
             [fft_all, idx_all] = epsilon_prefft(wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, pol, fft_all, idx_all, use_gpu);
         end
     end
+    fprintf('\nPrecomputation completed.\n');
 else
     fprintf('No precomputation of wav to save memory.\n');
 end
 
 %% Main loop
 % 对每个k点计算
+fprintf('Starting main epsilon calculation loop...\n');
+
 for iq = 1:sys.nkpts
     qq = pol.qpt(iq,:);
     syms_qq = subgrp(qq, syms);
@@ -131,6 +148,26 @@ for iq = 1:sys.nkpts
         end
     end
     
+    % 计算当前K点(q点)的总工作量（价带数量之和）
+    fprintf('\n[Epsilon] K-point %2d/%2d | K-vector = (%8.4f, %8.4f, %8.4f)', ...
+        iq, sys.nkpts, qq(1), qq(2), qq(3));
+    
+    total_bands_for_k = 0;
+    for ik = 1:nrq
+        if precompute_wav
+            wfnkq_temp = wfnkq_all{iq, ik};
+        else
+            rk = gr.f(indrk(ik),:);
+            wfnkq_temp = genwf(rk + qq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
+        end
+        % 使用第一个自旋通道估算
+        occ_v_temp = get_occ(options, wfnkq_temp.ikq, 1);
+        no_v_temp = sum(occ_v_temp > 0);
+        total_bands_for_k = total_bands_for_k + no_v_temp * nspin;
+    end
+    
+    current_bands_for_k = 0;
+    
     for ispin = 1 : nspin
         for ik = 1 : nrq
             % 初始化临时 chi0
@@ -140,7 +177,6 @@ for iq = 1:sys.nkpts
                 chi0_tmp = zeros(nmtx_current, nmtx_current);
             end
             
-            fprintf('  Irreducible k-point %d/%d...\n', ik, nrq);
             rk = gr.f(indrk(ik),:);
             [nstar, ~, rqs] = rqstar(syms_qq, rk);
             
@@ -169,23 +205,18 @@ for iq = 1:sys.nkpts
             no_c = nbands - no_c_start + 1;
             
             if no_v == 0 || no_c == 0
+                current_bands_for_k = current_bands_for_k + no_v;
                 continue;
             end
             
-            fprintf('    Calculating M matrix elements for ik %d spin %d (v=%d, c=%d)...\n', ik, ispin, no_v, no_c);
-            
             % 处理所有价带和导带
-            fprintf('开始计算矩阵元...\n');
             for iv = 1:no_v
-                % 每10个价带显示一次进度
-                if mod(iv, 10) == 1 || iv == no_v
-                    fprintf('处理价带 %d/%d', iv, no_v);
-                    if no_c > 1
-                        fprintf('，导带范围: %d-%d\n', no_c_start, no_c_start + no_c - 1);
-                    else
-                        fprintf('\n');
-                    end
-                end
+                current_bands_for_k = current_bands_for_k + 1;
+                % 使用print_progress函数更新进度条（每10%刷新）
+                print_progress(current_bands_for_k, total_bands_for_k, ...
+                    'Message', 'Epsilon', ...
+                    'Task', sprintf('epsilon_k%d', iq), ...
+                    'PercentStep', 10);
                 
                 for ic_idx = 1:no_c
                     ic = no_c_start + ic_idx - 1; % 转换为全局能带索引
@@ -267,10 +298,7 @@ for iq = 1:sys.nkpts
         I_gpu = eye(n, 'gpuArray');
         eps_tmp_gpu = repmat(I_gpu, 1, 1, nf);
         eps_tmp_gpu = eps_tmp_gpu - bsxfun(@times, coulg_gpu, chi0_sum);
-        % 备选写法（效果类似）：
-        % eps_tmp_gpu = eps_tmp_gpu - pagemtimes(coulg_gpu, chi0_sum);
         eps_inv_gpu = pagefun(@inv, eps_tmp_gpu);
-%         eps_inv_gpu = pageinv(eps_tmp_gpu);
         eps_inv{iq} = gather(eps_inv_gpu);
         clear eps_tmp_gpu;
     else
@@ -284,7 +312,6 @@ for iq = 1:sys.nkpts
             eps_inv_cell{k} = inv(eps_tmp(:,:,k));
         end
         eps_inv{iq} = cat(3, eps_inv_cell{:});
-%         eps_inv{iq} = pageinv(eps_tmp);
     end
 end
 
@@ -300,5 +327,5 @@ if use_gpu
     reset(gpuDevice);
 end
 
-fprintf('Calculation of epsilon completed successfully.\n');
+fprintf('\nCalculation of epsilon completed successfully.\n');
 end

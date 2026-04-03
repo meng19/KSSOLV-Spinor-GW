@@ -47,8 +47,9 @@ sint = zeros(nfreqeval, 1) + 0i;   % 虚频率积分贡献
 % 1. 静态 COH 贡献（如果开启 exact_ch）
 % ───────────────────────────────────────────────
 if isfield(sig, 'exact_static_ch') && sig.exact_static_ch == 1
-    %     achx_loc = -0.5 * sum(sum(aqsm .* aqsn' .* eps_inv_I_coul(:,:,1) * 0.5));
-    achx_loc = -0.5 * sum(sum(aqsmn .* eps_inv_I_coul(:,:,1) * 0.5));
+%     achx_loc = -0.5 * sum(sum(aqsm .* aqsn' .* eps_inv_I_coul(:,:,1) * 0.5));
+    E_1 = reshape(eps_inv_I_coul(:,:,1), ncouls*ncouls, 1);
+    achx_loc = -0.25 * M_flat.' * E_1;
 else
     achx_loc = 0;
 end
@@ -100,8 +101,7 @@ end
 % 3. 虚频率积分部分（最常用 method=0）
 % ───────────────────────────────────────────────
 % sW_imag = sum(sum(aqsm .* aqsn' .* eps_inv_I_coul(:,:,nfreq_real+1 : nfreq_real+nfreq_imag)));
-eps_imag = eps_inv_I_coul(:,:, nfreq_real+1 : nfreq_real + nfreq_imag);
-E_flat = reshape(eps_imag, ncouls*ncouls, nfreq_imag);
+E_flat = reshape(eps_inv_I_coul(:,:, nfreq_real+1 : nfreq_real + nfreq_imag), ncouls*ncouls, nfreq_imag);
 sW_imag = M_flat.' * E_flat;
 sW_imag = -sW_imag(:);
 

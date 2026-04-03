@@ -84,6 +84,21 @@ if precompute_wav
     idx_all.q = cell(gr.nf, sig.nkn);
     idx_all.kq = cell(gr.nf, sig.nkn); % Dimensions: [iq, ik]
     
+    % 计算预计算总数
+    precompute_total = 0;
+    for ik = 1:sig.nkn
+        rk = sig.qpt(ik, :);
+        syms_rk = subgrp(rk, syms);
+        [nrk, neq, indrk] = irrbz(syms_rk, gr);
+        if no_symmetries_q_grid
+            nrk = gr.nf;
+            indrk = (1:nrk);
+            neq = ones(1, nrk);
+        end
+        precompute_total = precompute_total + nrk;
+    end
+    
+    precompute_count = 0;
     for ik = 1:sig.nkn
         rk = sig.qpt(ik, :);
         syms_rk = subgrp(rk, syms);
@@ -95,6 +110,9 @@ if precompute_wav
         end
         for iq = 1:nrk
             qq = gr.f(indrk(iq), :);
+            precompute_count = precompute_count + 1;
+            print_progress(precompute_count, precompute_total, 'Message', 'Precompute WFN', 'Task', 'sigma_precompute');
+            
             wfnk_all{ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             
             rkq = rk - qq;
@@ -107,6 +125,7 @@ if precompute_wav
             [igpp{iq, ik}, valid_indices{iq, ik}]= pre_exact_static_ch(fbz, gvec, indrk, iq, use_gpu);
         end
     end
+    fprintf('\nPrecomputation completed.\n');
 else
     fprintf('No precomputation of wav to save memory.\n');
 end
@@ -135,10 +154,20 @@ fprintf('Starting sigma calculation loop over spins and bands...\n');
 
 for ispin = 1 : nspin
     fprintf('Processing spin %d of %d...\n', ispin, nspin);
+    
     for in = ndiag_min : ndiag_max
-        fprintf('Processing band %d ...\n', in);
+        fprintf('\n Band %d (index %d/%d)', in, in - ndiag_min + 1, ndiag);
+        total_iterations = sig.nkn;
+        current_iteration = 0;
         for ik = 1 : sig.nkn
-            fprintf('Processing k-point %d of %d...\n', ik, sig.nkn);
+            current_iteration = current_iteration + 1;
+            rk = sig.qpt(ik, :);
+            
+            % 使用print_progress函数更新进度条（每10%刷新）
+            print_progress(current_iteration, total_iterations, ...
+                'Message', sprintf('Sigma sp:%d ik:%d', ispin, ik), ...
+                'Task', sprintf('sigma_spin%d_iband%d', ispin, in), ...
+                'PercentStep', 10);
             
             % 在循环开始前初始化GPU变量
             if use_gpu
@@ -157,9 +186,9 @@ for ispin = 1 : nspin
                 end
             end
             
-            rk = sig.qpt(ik, :);
             syms_rk = subgrp(rk, syms);
             [nrk, neq, indrk] = irrbz(syms_rk, gr);
+            
             if precompute_wav
                 % Use precomputed wfnk
                 wfnk = wfnk_all{ik};
@@ -316,5 +345,5 @@ if sig.freq_dep == 2
     sig = get_eqp1(nspin, ndiag_min, ndiag_max, emf, omega_storage, iw_lda_storage, asx_freq, ach_freq, achx, ax, sig);
 end
 
-fprintf('Calculation completed.\n');
+fprintf('\nCalculation completed.\n');
 end

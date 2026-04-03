@@ -34,7 +34,7 @@ toc
 
 tic
 sig.nbnd = 29;
-sig.ndiag_min = 29;
+sig.ndiag_min = 26;
 sig.ndiag_max = 29;
 sig.freq_dep = 2;
 sig.freq_dep_method = 2;
@@ -45,7 +45,7 @@ sig.cd_int_method = 0;
 sig.coul_cut = 'spherical_truncation';
 sig.coul_cutoff = 10;
 sig.no_symmetries_q_grid = 1;
-sig.exact_static_ch = 0;
+sig.exact_static_ch = 1;
 sig.use_gpu = 0;
 sig.precompute_wav = 0;
 sig = sigma(eps, sig, sys, options, syms);
