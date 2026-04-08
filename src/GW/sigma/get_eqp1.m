@@ -6,19 +6,21 @@ for ispin = 1:nspin
             n_index = in - ndiag_min + 1;
             freqs = squeeze(omega(in, ik, ispin, :));
             iw = iw_lda(in, ik, ispin);
-            ax_tmp = ax(n_index,ik,ispin) * ryd;
-            asx_tmp = asx_freq{n_index,ik,ispin} * ryd;
-            ach_tmp = ach_freq{n_index,ik,ispin} * ryd;
-            achx_tmp = achx(n_index,ik,ispin) * ryd;
+            ax_tmp = ax(n_index, ik, ispin) * ryd;
+            asx_tmp = asx_freq{n_index, ik, ispin} * ryd;
+            ach_tmp = ach_freq{n_index, ik, ispin} * ryd;
+            achx_tmp = achx(n_index, ik, ispin) * ryd;
             asigt_cor = ach_tmp + achx_tmp;
-            fmin = emf(in) + ax_tmp + asx_tmp + ach_tmp + achx_tmp - sig.vxc(n_index, ik, ispin) - freqs;
+            fmin = emf(in, ik, ispin) + ax_tmp + asx_tmp + ach_tmp + achx_tmp - sig.vxc(n_index, ik, ispin) - freqs;
             
             [eqp1, neqp1] = cal_eqp1(freqs, fmin, sig.eqp0(n_index,ik,ispin));
-            sig.eqp1(n_index, ik, ispin) = eqp1;
+            sig.eqp1(n_index, ik, ispin) = real(eqp1);
             sig.neqp1(n_index, ik, ispin) = neqp1;
         end
     end
 end
+%% Symmetrize matrix elements
+sig = symmetrize_sig(sig, emf, ndiag_min, ndiag_max, nspin, {'eqp1'});
 end
 
 function [eqp1, neqp1] = cal_eqp1(freqs, fmin, eqp0)

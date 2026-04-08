@@ -77,7 +77,8 @@ end
 
 % 获取当前时间
 currentTime = datetime('now');
-timeStr = datestr(currentTime, 'yyyy-mm-dd HH:MM:SS');
+% timeStr = datestr(currentTime, 'yyyy-mm-dd HH:MM:SS');
+timeStr = datestr(currentTime, 'HH:MM:SS');
 
 % 使用提供的总进度或当前层级的总进度
 if ~isempty(totalAll)
