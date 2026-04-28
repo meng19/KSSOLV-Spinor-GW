@@ -151,19 +151,22 @@ else
 end
 
 % 格式化输出
-fprintf('\r'); % 回车符，覆盖当前行
+fprintf('\n'); % 回车符，覆盖当前行
 if isempty(msg)
     fprintf('[%s] %s %6.2f%% | Elapsed: %s | ETA: %s', ...
         timeStr, bar, percent * 100, elapsedStr, etaStr);
 else
     % 截断过长的消息以确保对齐
-    maxMsgLen = 15;
+    maxMsgLen = 18;
     if length(msg) > maxMsgLen
         msg = msg(1:maxMsgLen);
     end
-    fprintf('[%s] %-15s %s %6.2f%% | Elapsed: %s | ETA: %s', ...
+    fprintf('[%s] %-18s %s %6.2f%% | Elapsed: %s | ETA: %s', ...
         timeStr, msg, bar, percent * 100, elapsedStr, etaStr);
 end
+
+% 强制刷新MATLAB事件队列，确保输出立即显示
+drawnow('update');
 
 % 如果完成，换行
 if current >= total || (effectiveCurrent >= effectiveTotal && effectiveCurrent > 0)
