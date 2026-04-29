@@ -25,8 +25,8 @@ eta = 0;
 eps.cutoff = 5;
 eps.coul_cut = 'spherical_truncation';
 eps.coul_cutoff = 5;
-eps.use_gpu = 0;
-eps.save_mem = 0;
+eps.use_gpu = 1;
+eps.save_mem = 1;
 eps.precompute_wav = 0;
 eps = epsilon(sys, options, syms, eps);
 toc

@@ -149,8 +149,8 @@ for iq = 1:sys.nkpts
     end
     
     % 计算当前K点(q点)的总工作量（价带数量之和）
-    fprintf('\n[Epsilon] K-point %2d/%2d | K-vector = (%8.4f, %8.4f, %8.4f)', ...
-        iq, sys.nkpts, qq(1), qq(2), qq(3));
+    fprintf('\n[Epsilon] K-point %2d/%2d | K-vector = (%8.4f, %8.4f, %8.4f) | nmtx = %2d', ...
+        iq, sys.nkpts, qq(1), qq(2), qq(3), nmtx_current);
     
     total_bands_for_k = 0;
     for ik = 1:nrq
