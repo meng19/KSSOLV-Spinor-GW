@@ -30,7 +30,7 @@ if search_efermi
                     error('there is a valence state above the middle energy')
                 end
             elseif ifmax(ik, ispin) + 1 <= nband
-                if any(ev(ifmax(ik, ispin) + 1 : ifmax(ik, ispin), ik, ispin) > emiddle)
+                if any(ev(ifmax(ik, ispin) + 1 : nband, ik, ispin) < emiddle)
                     error('there is a conduction state below the middle energy')
                 end
             end
