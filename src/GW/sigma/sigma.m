@@ -17,6 +17,12 @@ if use_gpu
     fprintf('Using GPU: %s\n', gpu_dev.Name);
 end
 
+use_isdf = isfield(sig, 'isdf') && isfield(sig.isdf, 'enable') && sig.isdf.enable;
+if use_isdf && use_gpu
+    error('ISDF:SigmaGPUUnsupported', ...
+        'ISDF sigma path currently supports CPU execution only. Set sig.use_gpu = 0.');
+end
+
 ndiag = ndiag_max - ndiag_min + 1;
 aqsch = cell(nbands, nspin);
 asx = zeros([ndiag sys.nkpts nspin]);
@@ -265,9 +271,22 @@ for ispin = 1 : nspin
                 ax_loc  = 0;
                 ach_loc = 0;
                 aqs = cell(nbands, nspin);
+
+                if use_isdf
+                    isdf_options = sig.isdf;
+                    if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
+                        isdf_options.rank = ceil(sqrt(nbands) * sig.isdf.rank_ratio);
+                    end
+                    aqs_isdf = isdf_sigma_batch(wfnkq, wfnk, fft, idx, ispin, ...
+                        nspinor, in, 1:nbands, isdf_options);
+                end
                 
                 for nn = 1 : nbands
-                    aqs{nn, ispin} = getm_sigma(in, nn, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
+                    if use_isdf
+                        aqs{nn, ispin} = aqs_isdf(:, nn);
+                    else
+                        aqs{nn, ispin} = getm_sigma(in, nn, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
+                    end
                     aqs_nocut = aqs{nn, ispin};
                     aqs_cutoff = aqs{nn, ispin}(1 : n_cutoff, 1);
                     if occ_kq(nn) > 0

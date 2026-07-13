@@ -208,6 +208,21 @@ for iq = 1:sys.nkpts
                 current_bands_for_k = current_bands_for_k + no_v;
                 continue;
             end
+
+            use_isdf = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && eps.isdf.enable;
+            if use_isdf
+                if use_gpu
+                    error('ISDF:EpsilonGPUUnsupported', ...
+                        'ISDF epsilon path currently supports CPU execution only. Set eps.use_gpu = 0.');
+                end
+                isdf_options = eps.isdf;
+                if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
+                    isdf_options.rank = ceil(sqrt(no_v * no_c) * eps.isdf.rank_ratio);
+                end
+                conduction_bands = no_c_start:nbands;
+                gme_isdf = isdf_epsilon_batch(wfnkq, wfnk, fft, idx, ispin, ...
+                    nspinor, 1:no_v, conduction_bands, isdf_options);
+            end
             
             % 处理所有价带和导带
             for iv = 1:no_v
@@ -220,7 +235,11 @@ for iq = 1:sys.nkpts
                 
                 for ic_idx = 1:no_c
                     ic = no_c_start + ic_idx - 1; % 转换为全局能带索引
-                    gme_temp = getm_epsilon(iv, ic, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
+                    if use_isdf
+                        gme_temp = gme_isdf(:, iv, ic_idx);
+                    else
+                        gme_temp = getm_epsilon(iv, ic, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
+                    end
                     
                     for ifreq = 1:pol.nfreq
                         freq = pol.freq(ifreq) / ryd;

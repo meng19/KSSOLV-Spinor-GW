@@ -15,8 +15,8 @@ tic
 eps.nbnd = 29;
 eps.nv = options.nv;
 eps.nc = eps.nbnd - eps.nv;
-% eps.freq_dep = 0;
-eps.freq_dep = 2;
+eps.freq_dep = 0;
+% eps.freq_dep = 2;
 eps.freq_dep_method = 2;
 eps.freq_cutoff = 200;
 eps.delta_freq = 15;

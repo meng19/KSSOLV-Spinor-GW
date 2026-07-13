@@ -4,11 +4,43 @@ if ~isfield(sig, 'use_gpu')
     sig.use_gpu = false;                % 默认不使用GPU
 end
 
+if ~isfield(sig, 'precompute_wav')
+    sig.precompute_wav = false;
+end
+
 if ~isfield(sig, 'freq_dep')
     sig.freq_dep = 0;                  % 默认静态COHSEX
 end
 
 if ~isfield(sig, 'freq_dep_method')
     sig.freq_dep_method = 2;           % 默认方法
+end
+
+if ~isfield(sig, 'no_symmetries_q_grid')
+    sig.no_symmetries_q_grid = false;
+end
+
+if ~isfield(sig, 'exact_static_ch')
+    sig.exact_static_ch = false;
+end
+
+if ~isfield(sig, 'isdf') || isempty(sig.isdf)
+    sig.isdf.enable = false;
+end
+
+if ~isfield(sig.isdf, 'enable')
+    sig.isdf.enable = false;
+end
+
+if ~isfield(sig.isdf, 'rank_ratio')
+    sig.isdf.rank_ratio = 1;
+end
+
+if ~isfield(sig.isdf, 'sample_method')
+    sig.isdf.sample_method = 'qrcp';
+end
+
+if ~isfield(sig.isdf, 'seed')
+    sig.isdf.seed = 0;
 end
 end
