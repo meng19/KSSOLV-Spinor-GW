@@ -19,6 +19,14 @@ if use_gpu
     fprintf('Available GPU memory: %.2f GB\n', gpu_dev.AvailableMemory/(1024)^3);
 end
 
+use_isdf_cauchy = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && ...
+    eps.isdf.enable && isfield(eps.isdf, 'algorithm') && ...
+    strcmpi(eps.isdf.algorithm, 'cauchy_polarizability');
+if use_isdf_cauchy
+    eps = isdf_epsilon_cauchy_polarizability(sys, options, syms, eps);
+    return;
+end
+
 fprintf('System parameters: nvbands = %d, ncbands = %d, nbands = %d, nspin = %d, nspinor = %d\n', nvbands, ncbands, nbands, nspin, nspinor);
 
 sigrid = Ggrid(sys, 4*sys.ecut);

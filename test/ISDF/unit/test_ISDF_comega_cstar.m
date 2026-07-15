@@ -2,7 +2,7 @@ clc;
 clear;
 
 script_dir = fileparts(mfilename('fullpath'));
-repo_root = fileparts(fileparts(script_dir));
+repo_root = fileparts(fileparts(fileparts(script_dir)));
 addpath(repo_root);
 old_dir = pwd;
 cleanup = onCleanup(@() cd(old_dir));

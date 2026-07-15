@@ -1,9 +1,12 @@
-function gme = isdf_epsilon_matrix_elements_from_real(phi, psi, idx_q, fftgrid, options)
-%ISDF_EPSILON_MATRIX_ELEMENTS_FROM_REAL Approximate epsilon matrix elements.
-%   phi and psi are real-space wavefunction factors on the FFT grid. For
-%   epsilon, pass phi = conj(valence_real) and psi = conduction_real.
+function gme = isdf_matrix_elements_from_real(phi, psi, idx_q, fftgrid, options)
+%ISDF_MATRIX_ELEMENTS_FROM_REAL Approximate FFTs of real-space products.
+%   phi and psi are real-space wavefunction factors on the FFT grid. The
+%   returned array stores FFT_G(phi(:, i) .* psi(:, j)) for all pairs.
 
 options = isdf_set_defaults(options, size(phi, 2), size(psi, 2), size(phi, 1));
+if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
+    options.fftgrid = fftgrid;
+end
 
 [nphi_grid, nphi] = size(phi);
 [npsi_grid, npsi] = size(psi);
@@ -16,7 +19,7 @@ end
 
 idx_q = idx_q(:);
 ind_mu = isdf_indices(phi, psi, options);
-zetag = isdf_kernelg_current_fft(phi, psi, ind_mu, idx_q, fftgrid);
+zetag = isdf_kernelg_current_fft(phi, psi, ind_mu, idx_q, fftgrid, options);
 
 rank_mu = length(ind_mu);
 gme = zeros(length(idx_q), nphi, npsi);

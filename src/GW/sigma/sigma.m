@@ -23,6 +23,19 @@ if use_isdf && use_gpu
         'ISDF sigma path currently supports CPU execution only. Set sig.use_gpu = 0.');
 end
 
+if use_isdf && isfield(sig.isdf, 'algorithm') && strcmpi(sig.isdf.algorithm, 'cauchy_cohsex')
+    if use_gpu
+        error('ISDF:CauchyCOHSEXGPU', ...
+            'ISDF Cauchy COHSEX path currently supports CPU execution only.');
+    end
+    if sig.freq_dep ~= 0
+        error('ISDF:CauchyCOHSEXFrequency', ...
+            'ISDF Cauchy COHSEX path requires sig.freq_dep = 0.');
+    end
+    sig = isdf_sigma_cohsex_cauchy(eps, sig, sys, options, syms);
+    return;
+end
+
 ndiag = ndiag_max - ndiag_min + 1;
 aqsch = cell(nbands, nspin);
 asx = zeros([ndiag sys.nkpts nspin]);

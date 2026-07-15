@@ -6,7 +6,7 @@ randn('state', 0);
 rand('state', 0);
 
 script_dir = fileparts(mfilename('fullpath'));
-repo_root = fileparts(fileparts(script_dir));
+repo_root = fileparts(fileparts(fileparts(script_dir)));
 addpath(repo_root);
 old_dir = pwd;
 cleanup = onCleanup(@() cd(old_dir));
@@ -32,15 +32,19 @@ eps_base.use_gpu = 0;
 eps_base.save_mem = 0;
 eps_base.precompute_wav = 0;
 
+tic
 eps_direct = epsilon(sys, options, syms, eps_base);
+toc
 
 eps_isdf_input = eps_base;
 eps_isdf_input.isdf.enable = true;
 eps_isdf_input.isdf.sample_method = 'qrcp';
-eps_isdf_input.isdf.rank = eps_base.nv * eps_base.nc;
+eps_isdf_input.isdf.rank = 78;
 eps_isdf_input.isdf.seed = 0;
 
+tic
 eps_isdf = epsilon(sys, options, syms, eps_isdf_input);
+toc
 
 max_relative_error = 0;
 for iq = 1:length(eps_direct.inv)

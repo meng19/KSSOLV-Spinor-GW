@@ -6,7 +6,7 @@ randn('state', 0);
 rand('state', 0);
 
 script_dir = fileparts(mfilename('fullpath'));
-repo_root = fileparts(fileparts(script_dir));
+repo_root = fileparts(fileparts(fileparts(script_dir)));
 addpath(repo_root);
 old_dir = pwd;
 cleanup = onCleanup(@() cd(old_dir));
@@ -35,7 +35,7 @@ eps_input.precompute_wav = 0;
 eps_result = epsilon(sys, options, syms, eps_input);
 
 sig_base.nbnd = 29;
-sig_base.ndiag_min = 26;
+sig_base.ndiag_min = 29;
 sig_base.ndiag_max = 29;
 sig_base.freq_dep = 2;
 sig_base.freq_dep_method = 2;
@@ -50,7 +50,7 @@ sig_base.exact_static_ch = 1;
 sig_base.use_gpu = 0;
 sig_base.precompute_wav = 0;
 
-sig_direct = sigma(eps_result, sig_base, sys, options, syms);
+% sig_direct = sigma(eps_result, sig_base, sys, options, syms);
 
 sig_isdf_input = sig_base;
 sig_isdf_input.isdf.enable = true;

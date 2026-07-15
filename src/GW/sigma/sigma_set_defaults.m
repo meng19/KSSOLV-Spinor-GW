@@ -24,8 +24,8 @@ if ~isfield(sig, 'exact_static_ch')
     sig.exact_static_ch = false;
 end
 
-if ~isfield(sig, 'isdf') || isempty(sig.isdf)
-    sig.isdf.enable = false;
+if ~isfield(sig, 'isdf') || isempty(sig.isdf) || ~isstruct(sig.isdf)
+    sig.isdf = struct();
 end
 
 if ~isfield(sig.isdf, 'enable')
@@ -42,5 +42,21 @@ end
 
 if ~isfield(sig.isdf, 'seed')
     sig.isdf.seed = 0;
+end
+
+if ~isfield(sig.isdf, 'algorithm') || isempty(sig.isdf.algorithm)
+    sig.isdf.algorithm = 'matrix_elements';
+end
+
+if ~isfield(sig.isdf, 'cauchy_method') || isempty(sig.isdf.cauchy_method)
+    sig.isdf.cauchy_method = 'cauchy';
+end
+
+if ~isfield(sig.isdf, 'cauchy_froErr') || isempty(sig.isdf.cauchy_froErr)
+    sig.isdf.cauchy_froErr = 1e-8;
+end
+
+if ~isfield(sig.isdf, 'cauchy_MaxIter') || isempty(sig.isdf.cauchy_MaxIter)
+    sig.isdf.cauchy_MaxIter = 12;
 end
 end

@@ -12,7 +12,8 @@ for ispinor = 1:nspinor
     sum_real = isdf_wavefunction_real_component( ...
         wfnkq, fft.Nfft2, idx.kq, ispin, ispinor, sum_bands);
 
-    gme_batch = gme_batch + isdf_sigma_matrix_elements_from_real( ...
-        state_real, sum_real, idx.q, fftgrid, isdf_options);
+    gme3 = isdf_matrix_elements_from_real( ...
+        conj(state_real(:)), sum_real, idx.q, fftgrid, isdf_options);
+    gme_batch = gme_batch + reshape(gme3, nq, nbands);
 end
 end

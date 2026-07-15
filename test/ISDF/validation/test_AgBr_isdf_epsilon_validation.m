@@ -6,14 +6,14 @@ randn('state', 0);
 rand('state', 0);
 
 script_dir = fileparts(mfilename('fullpath'));
-repo_root = fileparts(fileparts(script_dir));
+repo_root = fileparts(fileparts(fileparts(script_dir)));
 addpath(repo_root);
 old_dir = pwd;
 cleanup = onCleanup(@() cd(old_dir));
 cd(repo_root);
 KSSOLV_startup;
 
-read_vxc = 0;
+read_vxc = 1;
 [sys, options, syms] = read_qe_gw('.\example\qe_data\AgBr', read_vxc);
 [sys, options] = gw_setup(sys, options);
 

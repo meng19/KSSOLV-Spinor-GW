@@ -7,11 +7,17 @@ rng(options.seed, 'twister');
 switch lower(options.sample_method)
     case 'qrcp'
         products = isdf_prod_states(phi, psi);
-        [~, ~, pivots] = qr(products', 0);
-        ind_mu = pivots(1:options.rank);
-        ind_mu = reshape(ind_mu, 1, []);
+        ind_mu = isdf_qrcp_indices_from_products(products, options.rank);
+    case {'qrcp_randomized', 'randomized_qrcp'}
+        ind_mu = isdf_randomized_qrcp_indices(phi, psi, options);
+    case 'kmeans'
+        weight = isdf_product_weight(phi, psi, options);
+        ind_mu = isdf_kmeans_indices(weight, options);
+    case 'default'
+        ind_mu = isdf_randomized_qrcp_indices(phi, psi, options);
     otherwise
         error('ISDF:UnknownSampleMethod', ...
-            'Unknown ISDF sample_method "%s". Supported method: qrcp.', options.sample_method);
+            ['Unknown ISDF sample_method "%s". Supported methods: qrcp, ' ...
+            'qrcp_randomized, kmeans, default.'], options.sample_method);
 end
 end

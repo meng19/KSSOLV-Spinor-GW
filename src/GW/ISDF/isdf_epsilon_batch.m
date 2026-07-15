@@ -15,7 +15,7 @@ for ispinor = 1:nspinor
 
     phi = conj(valence_real);
     psi = conduction_real;
-    gme_batch = gme_batch + isdf_epsilon_matrix_elements_from_real( ...
+    gme_batch = gme_batch + isdf_matrix_elements_from_real( ...
         phi, psi, idx.q, fftgrid, isdf_options);
 end
 end
