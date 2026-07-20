@@ -122,7 +122,7 @@ for ispin = 1:nspin
             if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
                 isdf_options.rank = ceil(sqrt(nbands) * sig.isdf.rank_ratio);
             end
-            sigma_space = isdf_spinor_build_space(left_components, right_components, ...
+            sigma_space = isdf_build_space(left_components, right_components, ...
                 idx.q, grid_size, isdf_options);
             aqs_isdf = sigma_space.zeta_g * sigma_space.product_mu;
             if use_reduced_screened
@@ -209,7 +209,7 @@ vc_options = sig.isdf;
 if ~isfield(vc_options, 'rank') || isempty(vc_options.rank)
     vc_options.rank = ceil(sqrt(no_v * numel(conduction_bands)) * sig.isdf.rank_ratio);
 end
-vc_space = isdf_spinor_build_space(left_components, right_components, ...
+vc_space = isdf_build_space(left_components, right_components, ...
     idx.q, grid_size, vc_options);
 
 cauchy_options.method = sig.isdf.cauchy_method;
@@ -217,6 +217,6 @@ cauchy_options.froErr = sig.isdf.cauchy_froErr;
 cauchy_options.MaxIter = sig.isdf.cauchy_MaxIter;
 ev_occ = options.ev(1:no_v, wfnkq.ikq, ispin);
 ev_unocc = options.ev(conduction_bands, wfnk.ikq, ispin);
-[coeff, info] = isdf_spinor_comega_cstar(vc_space.left_mu_components, ...
+[coeff, info] = isdf_comega_cstar(vc_space.left_mu_components, ...
     vc_space.right_mu_components, ev_occ, ev_unocc, cauchy_options);
 end

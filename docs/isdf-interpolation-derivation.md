@@ -615,7 +615,7 @@ $$
 
 ```matlab
 isdf_comega_cstar(...)
-isdf_spinor_comega_cstar(...)
+isdf_comega_cstar({left_component_1, ...}, {right_component_1, ...}, ...)
 ```
 
 ## 10. epsilon 中的组合
@@ -635,10 +635,10 @@ $$
 S = C\Omega^{-1}C^*.
 $$
 
-在代码的 spinor Cauchy epsilon 路径中对应：
+在代码的多分量 Cauchy epsilon 路径中对应：
 
 ```matlab
-[coeff, info] = isdf_spinor_comega_cstar(...);
+[coeff, info] = isdf_comega_cstar(...);
 chi0_sum = chi0_sum + conj(vc_space.zeta_g) * conj(coeff) * vc_space.zeta_g.';
 ```
 

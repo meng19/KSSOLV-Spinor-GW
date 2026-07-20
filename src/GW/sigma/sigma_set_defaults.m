@@ -45,7 +45,11 @@ if ~isfield(sig.isdf, 'seed')
 end
 
 if ~isfield(sig.isdf, 'algorithm') || isempty(sig.isdf.algorithm)
-    sig.isdf.algorithm = 'matrix_elements';
+    if sig.freq_dep == 0
+        sig.isdf.algorithm = 'cauchy_cohsex';
+    else
+        sig.isdf.algorithm = 'matrix_elements';
+    end
 end
 
 if ~isfield(sig.isdf, 'cauchy_method') || isempty(sig.isdf.cauchy_method)

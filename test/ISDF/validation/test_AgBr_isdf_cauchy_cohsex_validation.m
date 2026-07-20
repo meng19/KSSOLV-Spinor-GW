@@ -39,7 +39,7 @@ sig_base.use_gpu = 0;
 sig_base.precompute_wav = 0;
 sig_base.freq_dep = 0;
 
-sig_direct = sigma(eps_result, sig_base, sys, options, syms);
+% sig_direct = sigma(eps_result, sig_base, sys, options, syms);
 
 sig_cauchy_input = sig_base;
 sig_cauchy_input.isdf.enable = true;
@@ -47,7 +47,7 @@ sig_cauchy_input.isdf.algorithm = 'cauchy_cohsex';
 sig_cauchy_input.isdf.sample_method = 'qrcp';
 sig_cauchy_input.isdf.rank = sig_base.nbnd;
 sig_cauchy_input.isdf.seed = 0;
-sig_cauchy_input.isdf.cauchy_method = 'cauchy';
+sig_cauchy_input.isdf.cauchy_method = 'direct';
 sig_cauchy_input.isdf.cauchy_froErr = 1e-8;
 sig_cauchy_input.isdf.cauchy_MaxIter = 12;
 

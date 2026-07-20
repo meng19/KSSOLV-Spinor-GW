@@ -27,6 +27,13 @@ if use_isdf_cauchy
     return;
 end
 
+if isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && eps.isdf.enable && ...
+        ~strcmpi(eps.isdf.algorithm, 'matrix_elements')
+    error('ISDF:UnknownEpsilonAlgorithm', ...
+        ['Unknown epsilon ISDF algorithm "%s". Supported algorithms: ' ...
+        'cauchy_polarizability, matrix_elements.'], eps.isdf.algorithm);
+end
+
 fprintf('System parameters: nvbands = %d, ncbands = %d, nbands = %d, nspin = %d, nspinor = %d\n', nvbands, ncbands, nbands, nspin, nspinor);
 
 sigrid = Ggrid(sys, 4*sys.ecut);
@@ -217,7 +224,8 @@ for iq = 1:sys.nkpts
                 continue;
             end
 
-            use_isdf = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && eps.isdf.enable;
+            use_isdf = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && ...
+                eps.isdf.enable && strcmpi(eps.isdf.algorithm, 'matrix_elements');
             if use_isdf
                 if use_gpu
                     error('ISDF:EpsilonGPUUnsupported', ...

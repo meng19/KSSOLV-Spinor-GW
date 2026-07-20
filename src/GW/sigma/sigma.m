@@ -36,6 +36,14 @@ if use_isdf && isfield(sig.isdf, 'algorithm') && strcmpi(sig.isdf.algorithm, 'ca
     return;
 end
 
+if use_isdf && ~strcmpi(sig.isdf.algorithm, 'matrix_elements')
+    error('ISDF:UnknownSigmaAlgorithm', ...
+        ['Unknown sigma ISDF algorithm "%s". Supported algorithms: ' ...
+        'cauchy_cohsex, matrix_elements.'], sig.isdf.algorithm);
+end
+
+use_isdf_matrix_elements = use_isdf && strcmpi(sig.isdf.algorithm, 'matrix_elements');
+
 ndiag = ndiag_max - ndiag_min + 1;
 aqsch = cell(nbands, nspin);
 asx = zeros([ndiag sys.nkpts nspin]);
@@ -285,7 +293,7 @@ for ispin = 1 : nspin
                 ach_loc = 0;
                 aqs = cell(nbands, nspin);
 
-                if use_isdf
+                if use_isdf_matrix_elements
                     isdf_options = sig.isdf;
                     if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
                         isdf_options.rank = ceil(sqrt(nbands) * sig.isdf.rank_ratio);
@@ -295,7 +303,7 @@ for ispin = 1 : nspin
                 end
                 
                 for nn = 1 : nbands
-                    if use_isdf
+                    if use_isdf_matrix_elements
                         aqs{nn, ispin} = aqs_isdf(:, nn);
                     else
                         aqs{nn, ispin} = getm_sigma(in, nn, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);

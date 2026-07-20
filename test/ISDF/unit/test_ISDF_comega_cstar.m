@@ -45,5 +45,10 @@ cauchy_relative_error = norm(cauchy_actual - direct, 'fro') / max(1, norm(direct
 assert(cauchy_relative_error < 1e-6, ...
     'ISDF COmegaCstar Cauchy helper mismatch: %.3e', cauchy_relative_error);
 
+component_actual = isdf_comega_cstar({phi}, {psi}, ev_occ, ev_unocc, options);
+wrapper_relative_error = norm(actual - component_actual, 'fro') / max(1, norm(component_actual, 'fro'));
+assert(wrapper_relative_error < 1e-12, ...
+    'Scalar COmegaCstar should match single-component cell path: %.3e', wrapper_relative_error);
+
 fprintf('ISDF COmegaCstar Cauchy test passed. relative_error = %.3e, iterations = %d\n', ...
     cauchy_relative_error, cauchy_info.iterations);

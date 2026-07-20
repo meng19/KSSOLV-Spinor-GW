@@ -1,5 +1,5 @@
 function eps = isdf_epsilon_cauchy_polarizability(sys, options, syms, eps)
-%ISDF_EPSILON_CAUCHY_POLARIZABILITY Static epsilon via spinor ISDF/Cauchy.
+%ISDF_EPSILON_CAUCHY_POLARIZABILITY Static epsilon via component ISDF/Cauchy.
 
 if eps.freq_dep ~= 0
     error('ISDF:CauchyEpsilonFrequency', ...
@@ -105,7 +105,7 @@ for iq = 1:sys.nkpts
         if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
             isdf_options.rank = ceil(sqrt(no_v * numel(conduction_bands)) * eps.isdf.rank_ratio);
         end
-        vc_space = isdf_spinor_build_space(left_components, right_components, ...
+        vc_space = isdf_build_space(left_components, right_components, ...
             idx.q, size(fft.Nfft1), isdf_options);
 
         cauchy_options.method = eps.isdf.cauchy_method;
@@ -113,7 +113,7 @@ for iq = 1:sys.nkpts
         cauchy_options.MaxIter = eps.isdf.cauchy_MaxIter;
         ev_occ = options.ev(1:no_v, wfnkq.ikq, ispin);
         ev_unocc = options.ev(conduction_bands, wfnk.ikq, ispin);
-        [coeff, info] = isdf_spinor_comega_cstar(vc_space.left_mu_components, ...
+        [coeff, info] = isdf_comega_cstar(vc_space.left_mu_components, ...
             vc_space.right_mu_components, ev_occ, ev_unocc, cauchy_options);
 
         chi0_sum = chi0_sum + conj(vc_space.zeta_g) * conj(coeff) * vc_space.zeta_g.';

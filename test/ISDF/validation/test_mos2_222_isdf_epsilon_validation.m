@@ -38,6 +38,7 @@ toc
 
 eps_isdf_input = eps_base;
 eps_isdf_input.isdf.enable = true;
+eps_isdf_input.isdf.algorithm = 'matrix_elements';
 eps_isdf_input.isdf.sample_method = 'qrcp';
 eps_isdf_input.isdf.rank = 78;
 eps_isdf_input.isdf.seed = 0;

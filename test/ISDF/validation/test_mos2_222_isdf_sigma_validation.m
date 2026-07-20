@@ -54,6 +54,7 @@ sig_base.precompute_wav = 0;
 
 sig_isdf_input = sig_base;
 sig_isdf_input.isdf.enable = true;
+sig_isdf_input.isdf.algorithm = 'matrix_elements';
 sig_isdf_input.isdf.sample_method = 'qrcp';
 sig_isdf_input.isdf.rank = sig_base.nbnd;
 sig_isdf_input.isdf.seed = 0;

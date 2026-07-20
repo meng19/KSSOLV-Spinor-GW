@@ -30,6 +30,7 @@ eps_direct = epsilon(sys, options, syms, eps_base);
 
 eps_isdf_input = eps_base;
 eps_isdf_input.isdf.enable = true;
+eps_isdf_input.isdf.algorithm = 'matrix_elements';
 eps_isdf_input.isdf.sample_method = 'qrcp';
 eps_isdf_input.isdf.rank = eps_base.nv * eps_base.nc;
 eps_isdf_input.isdf.seed = 0;

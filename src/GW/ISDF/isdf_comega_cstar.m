@@ -6,6 +6,13 @@ function [result, info] = isdf_comega_cstar(phi, psi, ev_occ, ev_unocc, options)
 if nargin < 5 || isempty(options)
     options = struct();
 end
+
+if ~iscell(phi)
+    phi = {phi};
+end
+if ~iscell(psi)
+    psi = {psi};
+end
 if ~isfield(options, 'method') || isempty(options.method)
     options.method = 'cauchy';
 end
@@ -34,18 +41,31 @@ switch lower(options.method)
 end
 end
 
-function result = isdf_comega_cstar_direct(phi, psi, ev_occ, ev_unocc)
-nmu = size(phi, 1);
+function result = isdf_comega_cstar_direct(left_mu_components, right_mu_components, ev_occ, ev_unocc)
+nmu = size(left_mu_components{1}, 1);
+nv = numel(ev_occ);
+nc = numel(ev_unocc);
+ncomponents = numel(left_mu_components);
+
+if ncomponents ~= numel(right_mu_components)
+    error('ISDF:ComponentMismatch', ...
+        'Left and right component counts must match.');
+end
+
 result = zeros(nmu, nmu);
-for iv = 1:length(ev_occ)
-    for ic = 1:length(ev_unocc)
-        c = conj(phi(:, iv)) .* psi(:, ic);
+for iv = 1:nv
+    for ic = 1:nc
+        c = zeros(nmu, 1);
+        for icomponent = 1:ncomponents
+            c = c + conj(left_mu_components{icomponent}(:, iv)) .* ...
+                right_mu_components{icomponent}(:, ic);
+        end
         result = result + (c * c') / (ev_occ(iv) - ev_unocc(ic));
     end
 end
 end
 
-function [result, rel_error, iter] = isdf_comega_cstar_cauchy(phi, psi, ev_occ, ev_unocc, options)
+function [result, rel_error, iter] = isdf_comega_cstar_cauchy(left_mu_components, right_mu_components, ev_occ, ev_unocc, options)
 gap_min = ev_unocc(1) - ev_occ(end);
 if gap_min <= 0
     error('ISDF:CauchyNoGap', 'Cauchy integral requires a positive band gap.');
@@ -59,19 +79,35 @@ if radius >= max_radius
     radius = 0.9 * max_radius;
 end
 
+nmu = size(left_mu_components{1}, 1);
+ncomponents = numel(left_mu_components);
+if ncomponents ~= numel(right_mu_components)
+    error('ISDF:ComponentMismatch', ...
+        'Left and right component counts must match.');
+end
+
 previous = [];
 rel_error = inf;
 
 for iter = 1:options.MaxIter
     npts = 2^(iter + 3);
-    result = zeros(size(phi, 1), size(phi, 1));
+    result = zeros(nmu, nmu);
     for ipt = 0:npts-1
         theta = 2 * pi * ipt / npts;
         exp_theta = exp(1i * theta);
         z = center + radius * exp_theta;
-        occ_matrix = conj(phi) * diag(1 ./ (z - ev_occ)) * phi.';
-        unocc_matrix = psi * diag(1 ./ (z - ev_unocc)) * psi';
-        result = result + (occ_matrix .* unocc_matrix) * (radius * exp_theta / npts);
+        for icomponent = 1:ncomponents
+            left_s = left_mu_components{icomponent};
+            right_s = right_mu_components{icomponent};
+            for jcomponent = 1:ncomponents
+                left_t = left_mu_components{jcomponent};
+                right_t = right_mu_components{jcomponent};
+                occ_matrix = conj(left_s) * diag(1 ./ (z - ev_occ)) * left_t.';
+                unocc_matrix = right_s * diag(1 ./ (z - ev_unocc)) * right_t';
+                result = result + (occ_matrix .* unocc_matrix) * ...
+                    (radius * exp_theta / npts);
+            end
+        end
     end
 
     if ~isempty(previous)

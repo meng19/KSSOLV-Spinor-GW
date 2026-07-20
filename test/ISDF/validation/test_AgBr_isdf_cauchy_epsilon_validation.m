@@ -1,4 +1,4 @@
-% Validate spinor ISDF Cauchy epsilon against the existing direct path.
+% Validate component ISDF Cauchy epsilon against the existing direct path.
 clc;
 clear all;
 close all;
@@ -27,13 +27,13 @@ eps_base.save_mem = 1;
 eps_base.precompute_wav = 0;
 eps_base.freq_dep = 0;
 
-% eps_direct = epsilon(sys, options, syms, eps_base);
+eps_direct = epsilon(sys, options, syms, eps_base);
 
 eps_cauchy_input = eps_base;
 eps_cauchy_input.isdf.enable = true;
 eps_cauchy_input.isdf.algorithm = 'cauchy_polarizability';
 eps_cauchy_input.isdf.sample_method = 'qrcp';
-eps_cauchy_input.isdf.rank = eps_base.nv * eps_base.nc;
+eps_cauchy_input.isdf.rank = 8;
 eps_cauchy_input.isdf.seed = 0;
 eps_cauchy_input.isdf.cauchy_method = 'cauchy';
 eps_cauchy_input.isdf.cauchy_froErr = 1e-8;
@@ -48,6 +48,6 @@ for iq = 1:length(eps_direct.inv)
     max_relative_error = max(max_relative_error, numerator / denominator);
 end
 
-fprintf('AgBr spinor Cauchy epsilon validation max relative error = %.3e\n', max_relative_error);
+fprintf('AgBr component Cauchy epsilon validation max relative error = %.3e\n', max_relative_error);
 assert(max_relative_error < 1e-8, ...
-    'AgBr spinor Cauchy epsilon validation failed: relative error %.3e', max_relative_error);
+    'AgBr component Cauchy epsilon validation failed: relative error %.3e', max_relative_error);

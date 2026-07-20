@@ -29,7 +29,11 @@ if ~isfield(eps.isdf, 'enable')
 end
 
 if ~isfield(eps.isdf, 'algorithm') || isempty(eps.isdf.algorithm)
-    eps.isdf.algorithm = 'matrix_elements';
+    if eps.freq_dep == 0
+        eps.isdf.algorithm = 'cauchy_polarizability';
+    else
+        eps.isdf.algorithm = 'matrix_elements';
+    end
 end
 
 if ~isfield(eps.isdf, 'rank_ratio')
