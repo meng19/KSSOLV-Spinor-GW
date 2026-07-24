@@ -66,6 +66,8 @@ Thumbs.db
 *.prefs
 *.prf
 *.lastsession
+.worktrees/
+.superpowers/
 
 # 编译输出
 *.obj
