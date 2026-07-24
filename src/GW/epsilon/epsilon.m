@@ -1,19 +1,11 @@
 function eps = epsilon(sys, options, syms, eps)
 eps = epsilon_set_defaults(eps);
 ctx = epsilon_context(sys, options, syms, eps);
-ryd = ctx.ryd;
 nbands = ctx.nbands;
 nspin = ctx.nspin;
 nspinor = ctx.nspinor;
-wfc_cutoff = ctx.wfc_cutoff;
-save_mem = ctx.save_mem;
-use_gpu = ctx.use_gpu;
-gvec = ctx.gvec;
-gr = ctx.gr;
-pol = ctx.pol;
-ekin = ctx.ekin;
-fact = ctx.fact;
 precompute_wav = ctx.precompute_wav;
+use_gpu = ctx.use_gpu;
 
 nvbands = eps.nv;
 ncbands = eps.nc;
@@ -32,54 +24,52 @@ if use_isdf_reduced
     return;
 end
 
-fprintf('System parameters: nvbands = %d, ncbands = %d, nbands = %d, nspin = %d, nspinor = %d\n', nvbands, ncbands, nbands, nspin, nspinor);
+fprintf('System parameters: nvbands = %d, ncbands = %d, nbands = %d, nspin = %d, nspinor = %d\n', ...
+    nvbands, ncbands, nbands, nspin, nspinor);
 
 % 添加Full frequency支持
 if eps.freq_dep == 2 && eps.freq_dep_method == 2
     % 初始化频率相关的存储结构
-    fprintf('Initializing full frequency-dependent calculation with %d frequencies\n', pol.nfreq);
+    fprintf('Initializing full frequency-dependent calculation with %d frequencies\n', ...
+        ctx.pol.nfreq);
 else
     % 非频率依赖静态COHSEX计算：视为只有一个频率0的特例
     fprintf('Initializing static calculation (frequency = 0)\n');
 end
 
-eps_tmp = cell(sys.nkpts, 1);
-eps_inv = cell(sys.nkpts, 1);
+wfnk_all = [];
+wfnkq_all = [];
+fft_all = [];
+idx_all = [];
 
 %% Precompute wavefunctions for all k-points and spins
 if precompute_wav
     fprintf('Precomputing wavefunctions...\n');
-    idx_all.k = cell(sys.nkpts, gr.nf);
-    idx_all.q = cell(sys.nkpts, 1);
-    idx_all.kq = cell(sys.nkpts, gr.nf); % Dimensions: [iq, ik]
-    fft_all = cell(sys.nkpts, 1);
-    
-    % 计算预计算总数
-    precompute_total = 0;
-    for iq = 1:sys.nkpts
-        qq = pol.qpt(iq,:);
-        syms_qq = subgrp(qq, syms);
-        [nrq, neq, indrk] = irrbz(syms_qq, gr);
-        precompute_total = precompute_total + nrq;
-    end
-    
+    wfnk_all = cell(ctx.nq, max(cellfun(@(qdata) qdata.nrq, ctx.qdata)));
+    wfnkq_all = cell(size(wfnk_all));
+    idx_all.k = cell(ctx.nq, ctx.gr.nf);
+    idx_all.q = cell(ctx.nq, 1);
+    idx_all.kq = cell(ctx.nq, ctx.gr.nf);
+    fft_all = cell(ctx.nq, 1);
+
+    precompute_total = sum(cellfun(@(qdata) qdata.nrq, ctx.qdata));
     precompute_count = 0;
-    for iq = 1:sys.nkpts
-        qq = pol.qpt(iq,:);
-        syms_qq = subgrp(qq, syms);
-        [nrq, neq, indrk] = irrbz(syms_qq, gr);
-        for ik = 1:nrq
+    for iq = 1:ctx.nq
+        qdata = ctx.qdata{iq};
+        qq = ctx.pol.qpt(iq, :);
+        for ik = 1:qdata.nrq
             precompute_count = precompute_count + 1;
-            print_progress(precompute_count, precompute_total, 'Message', 'Precompute WFN', 'Task', 'epsilon_precompute');
-            
-            rk = gr.f(indrk(ik),:);
-            wfnk_all{iq, ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
-            
-            rkq = rk + qq;
-            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
-            
-            % 由于FFT格点仅与k, q有关，预计算信息
-            [fft_all, idx_all] = epsilon_prefft(wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, pol, fft_all, idx_all, use_gpu);
+            print_progress(precompute_count, precompute_total, ...
+                'Message', 'Precompute WFN', 'Task', 'epsilon_precompute');
+
+            rk = ctx.gr.f(qdata.indrk(ik), :);
+            wfnk_all{iq, ik} = genwf(rk, ctx.gr, ctx.gvec, ctx.syms, ...
+                ctx.sys, ctx.options, ctx.wfc_cutoff, nbands, use_gpu);
+            wfnkq_all{iq, ik} = genwf(rk + qq, ctx.gr, ctx.gvec, ...
+                ctx.syms, ctx.sys, ctx.options, ctx.wfc_cutoff, nbands, use_gpu);
+            [fft_all, idx_all] = epsilon_prefft( ...
+                wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, ...
+                ctx.pol, fft_all, idx_all, use_gpu);
         end
     end
     fprintf('\nPrecomputation completed.\n');
@@ -88,227 +78,65 @@ else
 end
 
 %% Main loop
-% 对每个k点计算
 fprintf('Starting main epsilon calculation loop...\n');
+ops = epsilon_ops(ctx);
+eps.inv = cell(ctx.nq, 1);
 
-for iq = 1:sys.nkpts
-    qq = pol.qpt(iq,:);
-    syms_qq = subgrp(qq, syms);
-    [nrq, neq, indrk] = irrbz(syms_qq, gr);
-    
-    nmtx_current = pol.nmtx(iq);
-    
-    % 初始化 chi0 累加器
-    if use_gpu
-        chi0_sum = gpuArray(zeros(nmtx_current, nmtx_current));
-    else
-        chi0_sum = zeros(nmtx_current, nmtx_current);
-    end
-    
-    % 预计算所有不可约k点的映射关系
-    indt_cell = cell(nrq, 1);
-    for ik = 1:nrq
-        rk = gr.f(indrk(ik),:);
-        [nstar, indst, rqs] = rqstar(syms_qq, rk);
-        
-        if (nstar ~= neq(ik))
-            error('nstar of kpoint %d mismatch', rk);
-        end
-        
-        indt_cell{ik} = cell(nstar, 1);
-        for it = 1:nstar
-            itran = syms_qq.indsub(indst(it));
-            kgq = -syms_qq.kgzero(indst(it),:);
-            isorti = zeros(gvec.ng, 1);
-            for i = 1:gvec.ng
-                isorti(pol.isrtx(i, iq)) = i;
-            end
-            indt_cell{ik}{it} = gmap(gvec, syms, nmtx_current, itran, kgq, pol.isrtx(:,iq), isorti, sys);
-        end
-    end
-    
-    % 计算当前K点(q点)的总工作量（价带数量之和）
+for iq = 1:ctx.nq
+    qdata = ctx.qdata{iq};
+    qq = ctx.pol.qpt(iq, :);
+    nmtx_current = ctx.pol.nmtx(iq);
+
     fprintf('\n[Epsilon] K-point %2d/%2d | K-vector = (%8.4f, %8.4f, %8.4f) | nmtx = %2d', ...
-        iq, sys.nkpts, qq(1), qq(2), qq(3), nmtx_current);
-    
+        iq, ctx.nq, qq(1), qq(2), qq(3), nmtx_current);
+
     total_bands_for_k = 0;
-    for ik = 1:nrq
+    for ik = 1:qdata.nrq
         if precompute_wav
             wfnkq_temp = wfnkq_all{iq, ik};
         else
-            rk = gr.f(indrk(ik),:);
-            wfnkq_temp = genwf(rk + qq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
+            rk = ctx.gr.f(qdata.indrk(ik), :);
+            wfnkq_temp = genwf(rk + qq, ctx.gr, ctx.gvec, ctx.syms, ...
+                ctx.sys, ctx.options, ctx.wfc_cutoff, nbands, use_gpu);
         end
-        % 使用第一个自旋通道估算
-        occ_v_temp = get_occ(options, wfnkq_temp.ikq, 1);
-        no_v_temp = sum(occ_v_temp > 0);
-        total_bands_for_k = total_bands_for_k + no_v_temp * nspin;
+        occ_v_temp = get_occ(ctx.options, wfnkq_temp.ikq, 1);
+        total_bands_for_k = total_bands_for_k + ...
+            sum(occ_v_temp > 0) * nspin;
     end
-    
+
     current_bands_for_k = 0;
-    
-    for ispin = 1 : nspin
-        for ik = 1 : nrq
-            % 初始化临时 chi0
-            if use_gpu
-                chi0_tmp = gpuArray(zeros(nmtx_current, nmtx_current));
-            else
-                chi0_tmp = zeros(nmtx_current, nmtx_current);
-            end
-            
-            rk = gr.f(indrk(ik),:);
-            [nstar, ~, rqs] = rqstar(syms_qq, rk);
-            
-            if precompute_wav
-                % 读取波函数
-                wfnk = wfnk_all{iq, ik};
-                wfnkq = wfnkq_all{iq, ik};
-                
-                % 读取FFT网格
-                idx.k = idx_all.k{iq, ik};
-                idx.q = idx_all.q{iq};
-                idx.kq = idx_all.kq{iq, ik};
-                fft = fft_all{iq};
-            else
-                wfnk  = genwf(rk,  gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
-                rkq   = rk + qq;
-                wfnkq = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
-                [fft, idx] = epsilon_prefft(wfnkq, wfnk, iq, ik, pol, [], [], use_gpu);
-            end
-            
-            % 获取能带信息
-            occ_vkq = get_occ(options, wfnkq.ikq, ispin);
-            no_v = sum(occ_vkq > 0);
-            occ_ck = get_occ(options, wfnk.ikq, ispin);
-            no_c_start = sum(occ_ck > 0) + 1;
-            no_c = nbands - no_c_start + 1;
-            
-            if no_v == 0 || no_c == 0
-                current_bands_for_k = current_bands_for_k + no_v;
+    acc = ops.init(iq);
+    for ispin = 1:nspin
+        for ik = 1:qdata.nrq
+            prepared = local_epsilon_prepared_data( ...
+                ctx, iq, ik, wfnk_all, wfnkq_all, fft_all, idx_all);
+            block = epsilon_prepare_block(ctx, iq, ik, ispin, prepared);
+            if isempty(block.valence_bands) || isempty(block.conduction_bands)
+                current_bands_for_k = current_bands_for_k + ...
+                    numel(block.valence_bands);
                 continue;
             end
 
-            use_isdf = strcmp(ctx.method, 'matrix_elements');
-            if use_isdf
-                if use_gpu
-                    error('ISDF:EpsilonGPUUnsupported', ...
-                        'ISDF epsilon path currently supports CPU execution only. Set eps.use_gpu = 0.');
-                end
-                isdf_options = eps.isdf;
-                if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
-                    isdf_options.rank = ceil(sqrt(no_v * no_c) * eps.isdf.rank_ratio);
-                end
-                conduction_bands = no_c_start:nbands;
-                gme_isdf = isdf_epsilon_batch(wfnkq, wfnk, fft, idx, ispin, ...
-                    nspinor, 1:no_v, conduction_bands, isdf_options);
-            end
-            
-            % 处理所有价带和导带
-            for iv = 1:no_v
+            contribution = ops.evaluate(block);
+            acc = ops.accumulate(acc, contribution, block);
+
+            for iv_local = 1:numel(block.valence_bands)
                 current_bands_for_k = current_bands_for_k + 1;
-                % 使用print_progress函数更新进度条（每10%刷新）
                 print_progress(current_bands_for_k, total_bands_for_k, ...
                     'Message', 'Epsilon', ...
                     'Task', sprintf('epsilon_k%d', iq), ...
                     'PercentStep', 10);
-                
-                for ic_idx = 1:no_c
-                    ic = no_c_start + ic_idx - 1; % 转换为全局能带索引
-                    if use_isdf
-                        gme_temp = gme_isdf(:, iv, ic_idx);
-                    else
-                        gme_temp = getm_epsilon(iv, ic, wfnkq, wfnk, fft, idx, ispin, nspinor, use_gpu);
-                    end
-                    
-                    for ifreq = 1:pol.nfreq
-                        freq = pol.freq(ifreq) / ryd;
-                        eden_temp(iv, ic_idx, ifreq) = get_eden(iv, ic, wfnkq, wfnk, ispin, options, freq, eps);
-                    end
-                    if save_mem
-                        % 立即累加到 chi0
-                        chi0_tmp = chi0_tmp + conj(gme_temp) * gme_temp.' .* eden_temp(iv, ic_idx, :);
-                    else
-                        % 存储数据（使用局部索引），用于后续使用矩阵乘法加速
-                        gme_storage(:, iv, ic_idx, indrk(ik)) = gme_temp;
-                        eden_storage(iv, ic_idx, indrk(ik), :) = eden_temp(iv, ic_idx, :);
-                    end
-                    
-                    % 处理简并k点
-                    if nstar > 1
-                        for it = 2:nstar
-                            gme_temp_degen = gme_temp(indt_cell{ik}{it});
-                            if save_mem
-                                chi0_tmp = chi0_tmp + conj(gme_temp_degen) * gme_temp_degen.' .* eden_temp(iv, ic_idx, :);
-                            else
-                                k_degenerate = rqs(it, :);
-                                [~, ik_degenerate] = ismember(k_degenerate, gr.f, 'rows');
-                                if ik_degenerate > 0
-                                    gme_storage(:, iv, ic_idx, ik_degenerate) = gme_temp_degen;
-                                    eden_storage(iv, ic_idx, ik_degenerate, :) = eden_temp(iv, ic_idx, :);
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-            
-            if save_mem
-                chi0_sum = chi0_sum + chi0_tmp; % Sum over k and spin
             end
         end
-        
-        if ~save_mem
-            chi0_sum = chi0_sum + get_chi0(gme_storage, eden_storage); % Sum over k, band and spin
-            clear gme_storage
-        end
     end
-    
-    clear chi0_tmp;
-    
-    % 应用缩放因子
-    chi0_sum = chi0_sum * fact;
-    
-    % 计算Coulomb势
-    coulg = coulG_select(eps, nmtx_current, pol.isrtx(:, iq), ...
-        ekin(:, iq), 0, pol.mtx{:, iq}, gvec, sys, iq);
-    
-    % 计算epsilon矩阵
-    if use_gpu
-        if ~isa(coulg, 'gpuArray')
-            coulg_gpu = gpuArray(coulg(:));
-        else
-            coulg_gpu = coulg(:);
-        end
-        
-        n  = nmtx_current;
-        nf = pol.nfreq;
-        
-        I_gpu = eye(n, 'gpuArray');
-        eps_tmp_gpu = repmat(I_gpu, 1, 1, nf);
-        eps_tmp_gpu = eps_tmp_gpu - bsxfun(@times, coulg_gpu, chi0_sum);
-        eps_inv_gpu = pagefun(@inv, eps_tmp_gpu);
-        eps_inv{iq} = gather(eps_inv_gpu);
-        clear eps_tmp_gpu;
-    else
-        n  = nmtx_current;
-        nf = pol.nfreq;
-        I3d = repmat(eye(n), 1, 1, nf);
-        eps_tmp = I3d - bsxfun(@times, coulg(:), chi0_sum);
-        % 预分配
-        eps_inv_cell = cell(1, size(eps_tmp, 3));
-        for k = 1:size(eps_tmp, 3)
-            eps_inv_cell{k} = inv(eps_tmp(:,:,k));
-        end
-        eps_inv{iq} = cat(3, eps_inv_cell{:});
-    end
+    eps = ops.finalize(eps, acc, iq);
 end
 
 % 存储结果
-eps.inv = eps_inv;
-eps.mtx = pol.mtx;
-eps.nmtx = pol.nmtx;
-eps.nfreq = pol.nfreq;
-eps.freq = pol.freq;
+eps.mtx = ctx.pol.mtx;
+eps.nmtx = ctx.pol.nmtx;
+eps.nfreq = ctx.pol.nfreq;
+eps.freq = ctx.pol.freq;
 
 % 最终清理
 if use_gpu
@@ -316,4 +144,19 @@ if use_gpu
 end
 
 fprintf('\nCalculation of epsilon completed successfully.\n');
+end
+
+function prepared = local_epsilon_prepared_data( ...
+    ctx, iq, ik, wfnk_all, wfnkq_all, fft_all, idx_all)
+if ~ctx.precompute_wav
+    prepared = [];
+    return;
+end
+
+prepared.wfnk = wfnk_all{iq, ik};
+prepared.wfnkq = wfnkq_all{iq, ik};
+prepared.fft = fft_all{iq};
+prepared.idx.k = idx_all.k{iq, ik};
+prepared.idx.q = idx_all.q{iq};
+prepared.idx.kq = idx_all.kq{iq, ik};
 end
