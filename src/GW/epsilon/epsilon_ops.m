@@ -14,7 +14,18 @@ switch ctx.method
             local_accumulate_full(ctx, acc, contribution, block);
         ops.finalize = @(eps, acc, iq) local_finalize_full(ctx, eps, acc, iq);
     case 'reduced_basis'
-        ops.init = @(iq) local_init_reduced(ctx, iq);
+        output_mode = lower(ctx.eps.isdf.output);
+        need_full_inverse = any(strcmp( ...
+            output_mode, {'full_inverse', 'both'}));
+        need_screened_w = any(strcmp( ...
+            output_mode, {'screened_w', 'both'}));
+        if ~need_full_inverse && ~need_screened_w
+            error('ISDF:ReducedEpsilonOutput', ...
+                'Unknown ISDF reduced-basis epsilon output "%s".', ...
+                ctx.eps.isdf.output);
+        end
+        ops.init = @(iq) local_init_reduced( ...
+            ctx, iq, need_full_inverse, need_screened_w);
         ops.evaluate = @(block) local_evaluate_reduced(ctx, block);
         ops.accumulate = @(acc, contribution, block) ...
             local_accumulate_reduced(ctx, acc, contribution, block);
@@ -23,15 +34,10 @@ switch ctx.method
 end
 end
 
-function acc = local_init_reduced(ctx, iq)
-output_mode = lower(ctx.eps.isdf.output);
-acc.need_full_inverse = any(strcmp(output_mode, {'full_inverse', 'both'}));
-acc.need_screened_w = any(strcmp(output_mode, {'screened_w', 'both'}));
-if ~acc.need_full_inverse && ~acc.need_screened_w
-    error('ISDF:ReducedEpsilonOutput', ...
-        'Unknown ISDF reduced-basis epsilon output "%s".', ...
-        ctx.eps.isdf.output);
-end
+function acc = local_init_reduced( ...
+    ctx, iq, need_full_inverse, need_screened_w)
+acc.need_full_inverse = need_full_inverse;
+acc.need_screened_w = need_screened_w;
 if acc.need_full_inverse
     acc.chi0 = zeros(ctx.pol.nmtx(iq));
 else

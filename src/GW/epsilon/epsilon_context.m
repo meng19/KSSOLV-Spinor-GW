@@ -85,8 +85,11 @@ for ik = 1:nrq
     rk = ctx.gr.f(indrk(ik), :);
     [nstar, indst, rqs] = rqstar(syms_q, rk);
     if nstar ~= neq(ik)
-        error('ISDF:ReducedEpsilonStar', ...
-            'K-point star size does not match its irreducible weight.');
+        if strcmp(ctx.method, 'reduced_basis')
+            error('ISDF:ReducedEpsilonStar', ...
+                'K-point star size does not match its irreducible weight.');
+        end
+        error('nstar of kpoint %d mismatch', rk);
     end
     qdata.rqs{ik} = rqs;
     qdata.g_maps{ik} = cell(nstar, 1);
