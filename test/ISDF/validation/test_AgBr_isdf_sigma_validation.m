@@ -48,6 +48,27 @@ sig_base.precompute_wav = 0;
 
 sig_direct = sigma(eps_result, sig_base, sys, options, syms);
 
+sig_disabled_input = sig_base;
+sig_disabled_input.isdf.enable = false;
+sig_disabled_input.isdf.algorithm = 'invalid-while-disabled';
+sig_disabled_input.isdf.reduced_solver = 17;
+sig_disabled = sigma(eps_result, sig_disabled_input, ...
+    sys, options, syms);
+
+direct_fields = sort(setdiff(fieldnames(sig_direct), {'isdf'}));
+disabled_fields = sort(setdiff(fieldnames(sig_disabled), {'isdf'}));
+assert(isequal(direct_fields, disabled_fields), ...
+    'Disabling ISDF changed non-ISDF sigma output fields.');
+sig_disabled_error = norm(sig_direct.sig(:) - sig_disabled.sig(:)) / ...
+    max(1, norm(sig_direct.sig(:)));
+cor_disabled_error = norm(sig_direct.cor(:) - sig_disabled.cor(:)) / ...
+    max(1, norm(sig_direct.cor(:)));
+eqp_disabled_error = norm(sig_direct.eqp0(:) - sig_disabled.eqp0(:)) / ...
+    max(1, norm(sig_direct.eqp0(:)));
+assert(max([sig_disabled_error, cor_disabled_error, ...
+    eqp_disabled_error]) < 1e-13, ...
+    'Disabled ISDF changed direct sigma outputs.');
+
 sig_isdf_input = sig_base;
 sig_isdf_input.isdf.enable = true;
 sig_isdf_input.isdf.algorithm = 'reduced_basis';

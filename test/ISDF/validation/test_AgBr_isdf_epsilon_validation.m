@@ -28,6 +28,26 @@ eps_base.precompute_wav = 0;
 
 eps_direct = epsilon(sys, options, syms, eps_base);
 
+eps_disabled_input = eps_base;
+eps_disabled_input.isdf.enable = false;
+eps_disabled_input.isdf.algorithm = 'invalid-while-disabled';
+eps_disabled_input.isdf.output = 17;
+eps_disabled = epsilon(sys, options, syms, eps_disabled_input);
+
+direct_fields = sort(setdiff(fieldnames(eps_direct), {'isdf'}));
+disabled_fields = sort(setdiff(fieldnames(eps_disabled), {'isdf'}));
+assert(isequal(direct_fields, disabled_fields), ...
+    'Disabling ISDF changed non-ISDF epsilon output fields.');
+disabled_error = 0;
+for iq = 1:numel(eps_direct.inv)
+    numerator = norm(eps_direct.inv{iq}(:) - eps_disabled.inv{iq}(:));
+    denominator = max(1, norm(eps_direct.inv{iq}(:)));
+    disabled_error = max(disabled_error, numerator / denominator);
+end
+assert(disabled_error < 1e-13, ...
+    'Disabled ISDF changed direct epsilon: relative error %.3e', ...
+    disabled_error);
+
 eps_isdf_input = eps_base;
 eps_isdf_input.isdf.enable = true;
 eps_isdf_input.isdf.algorithm = 'matrix_elements';
