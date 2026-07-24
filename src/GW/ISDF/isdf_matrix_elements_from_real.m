@@ -19,7 +19,8 @@ end
 
 idx_q = idx_q(:);
 ind_mu = isdf_indices(phi, psi, options);
-zetag = isdf_kernelg_current_fft(phi, psi, ind_mu, idx_q, fftgrid, options);
+[c1, c2] = isdf_product_gram({conj(phi)}, {psi}, ind_mu);
+zetag = isdf_zeta_g_from_product_gram(c1, c2, idx_q, fftgrid, options);
 
 rank_mu = length(ind_mu);
 gme = zeros(length(idx_q), nphi, npsi);

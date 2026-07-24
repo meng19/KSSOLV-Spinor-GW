@@ -46,14 +46,13 @@ end
 
 if ~isfield(sig.isdf, 'algorithm') || isempty(sig.isdf.algorithm)
     if sig.freq_dep == 0
-        sig.isdf.algorithm = 'cauchy_cohsex';
+        sig.isdf.algorithm = 'reduced_basis';
     else
         sig.isdf.algorithm = 'matrix_elements';
     end
 end
-
-if ~isfield(sig.isdf, 'cauchy_method') || isempty(sig.isdf.cauchy_method)
-    sig.isdf.cauchy_method = 'cauchy';
+if ~isfield(sig.isdf, 'reduced_solver') || isempty(sig.isdf.reduced_solver)
+    sig.isdf.reduced_solver = 'cauchy';
 end
 
 if ~isfield(sig.isdf, 'cauchy_froErr') || isempty(sig.isdf.cauchy_froErr)

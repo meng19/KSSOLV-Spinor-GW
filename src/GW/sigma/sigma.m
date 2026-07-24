@@ -23,23 +23,23 @@ if use_isdf && use_gpu
         'ISDF sigma path currently supports CPU execution only. Set sig.use_gpu = 0.');
 end
 
-if use_isdf && isfield(sig.isdf, 'algorithm') && strcmpi(sig.isdf.algorithm, 'cauchy_cohsex')
+if use_isdf && isfield(sig.isdf, 'algorithm') && strcmpi(sig.isdf.algorithm, 'reduced_basis')
     if use_gpu
-        error('ISDF:CauchyCOHSEXGPU', ...
-            'ISDF Cauchy COHSEX path currently supports CPU execution only.');
+        error('ISDF:ReducedSigmaGPU', ...
+            'ISDF reduced-basis sigma currently supports CPU execution only.');
     end
     if sig.freq_dep ~= 0
-        error('ISDF:CauchyCOHSEXFrequency', ...
-            'ISDF Cauchy COHSEX path requires sig.freq_dep = 0.');
+        error('ISDF:ReducedSigmaFrequency', ...
+            'ISDF reduced-basis sigma requires sig.freq_dep = 0.');
     end
-    sig = isdf_sigma_cohsex_cauchy(eps, sig, sys, options, syms);
+    sig = isdf_sigma_reduced_basis(eps, sig, sys, options, syms);
     return;
 end
 
 if use_isdf && ~strcmpi(sig.isdf.algorithm, 'matrix_elements')
     error('ISDF:UnknownSigmaAlgorithm', ...
         ['Unknown sigma ISDF algorithm "%s". Supported algorithms: ' ...
-        'cauchy_cohsex, matrix_elements.'], sig.isdf.algorithm);
+        'reduced_basis, matrix_elements.'], sig.isdf.algorithm);
 end
 
 use_isdf_matrix_elements = use_isdf && strcmpi(sig.isdf.algorithm, 'matrix_elements');
@@ -246,26 +246,16 @@ for ispin = 1 : nspin
                 
                 %%
                 I = eye(fbz.nmtx_cutoff(indrk(iq)));
-                if strcmp(sig.coul_cut, 'spherical_truncation')
-                    coulg = coulG_spherical_truncation(fbz.nmtx(1, indrk(iq)), fbz.isrtx(:, indrk(iq)), ekin(:, indrk(iq)), sig.coul_cutoff, 1);
-                    
-                elseif strcmp(sig.coul_cut, 'cell_box_truncation')
-                    if iq > 1
-                        error('cell_box_truncation only support one Gamma=0 calculation')
-                    end
-                    coulg = coulG_cell_box_truncation(fbz.mtx{:, iq}, gvec, sys);
-                    
-                else
-                    error('Unknown truncation schemes for the Coulomb potential: %s. Please choose spherical_truncation or cell_box_truncation.', eps.coul_cut);
-                end
-                coulg_nocut = fact * coulg;
-                coulg_cutoff = coulg_nocut(1 : n_cutoff, 1);
+                coulg = coulG_select(sig, fbz.nmtx(1, indrk(iq)), ...
+                    fbz.isrtx(:, indrk(iq)), ekin(:, indrk(iq)), ...
+                    1, fbz.mtx{:, indrk(iq)}, gvec, sys, indrk(iq));
+                coulg_cutoff = coulg(1 : n_cutoff, 1);
                 eps_inv_I = eps_inv - I;
-                eps_inv_I_coul = eps_inv_I .* coulg_cutoff';
+                eps_inv_I_coul = fact * (eps_inv_I .* coulg_cutoff');
                 if use_gpu
                     eps_inv_I_coul = gpuArray(eps_inv_I_coul);
-                    coulg_nocut    = gpuArray(coulg_nocut);
-                    coulg_cutoff   = gpuArray(coulg_cutoff);
+                    coulg = gpuArray(coulg);
+                    coulg_cutoff = gpuArray(coulg_cutoff);
                 end
                 
                 if precompute_wav
@@ -311,7 +301,7 @@ for ispin = 1 : nspin
                     aqs_nocut = aqs{nn, ispin};
                     aqs_cutoff = aqs{nn, ispin}(1 : n_cutoff, 1);
                     if occ_kq(nn) > 0
-                        ax_loc = ax_loc - occ_kq(nn) * sum(abs(aqs_nocut).^2 .* coulg_nocut);
+                        ax_loc = ax_loc - occ_kq(nn) * fact * sum(abs(aqs_nocut).^2 .* coulg);
                     end
                     if sig.freq_dep == 0
                         [asx_loc, ach_loc] = sigma_cohsex(asx_loc, ach_loc, occ_kq(nn), aqs_cutoff, aqs_cutoff, eps_inv_I_coul);

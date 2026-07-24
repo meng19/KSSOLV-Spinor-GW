@@ -13,7 +13,7 @@ cleanup = onCleanup(@() cd(old_dir));
 cd(repo_root);
 KSSOLV_startup;
 
-read_vxc = 0;
+read_vxc = 1;
 [sys, options, syms] = read_qe_gw('.\example\qe_data\AgBr', read_vxc);
 [sys, options] = gw_setup(sys, options);
 
@@ -28,6 +28,15 @@ eps_input.precompute_wav = 0;
 
 eps_result = epsilon(sys, options, syms, eps_input);
 
+eps_isdf_input = eps_input;
+eps_isdf_input.isdf.enable = true;
+eps_isdf_input.isdf.algorithm = 'reduced_basis';
+eps_isdf_input.isdf.sample_method = 'qrcp';
+eps_isdf_input.isdf.rank = 8;
+eps_isdf_input.isdf.seed = 0;
+
+eps_isdf = epsilon(sys, options, syms, eps_isdf_input);
+
 sig_base.nbnd = eps_input.nbnd;
 sig_base.ndiag_min = options.nv;
 sig_base.ndiag_max = options.nv;
@@ -41,12 +50,12 @@ sig_direct = sigma(eps_result, sig_base, sys, options, syms);
 
 sig_isdf_input = sig_base;
 sig_isdf_input.isdf.enable = true;
-sig_isdf_input.isdf.algorithm = 'matrix_elements';
+sig_isdf_input.isdf.algorithm = 'reduced_basis';
 sig_isdf_input.isdf.sample_method = 'qrcp';
-sig_isdf_input.isdf.rank = sig_base.nbnd;
+sig_isdf_input.isdf.rank = 8;
 sig_isdf_input.isdf.seed = 0;
 
-sig_isdf = sigma(eps_result, sig_isdf_input, sys, options, syms);
+sig_isdf = sigma(eps_isdf, sig_isdf_input, sys, options, syms);
 
 sig_relative_error = norm(sig_direct.sig(:) - sig_isdf.sig(:)) / max(1, norm(sig_direct.sig(:)));
 eqp_relative_error = norm(sig_direct.eqp0(:) - sig_isdf.eqp0(:)) / max(1, norm(sig_direct.eqp0(:)));

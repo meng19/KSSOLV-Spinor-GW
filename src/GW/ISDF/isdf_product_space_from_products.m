@@ -35,14 +35,7 @@ end
 
 product_mu = products(ind_mu, :);
 [zeta_real, solve_info] = isdf_stable_right_solve(products, product_mu, options);
-
-idx_q = idx_q(:);
-zeta_g = zeros(length(idx_q), numel(ind_mu));
-for imu = 1:numel(ind_mu)
-    zeta_grid = reshape(zeta_real(:, imu), fftgrid);
-    zeta_fft = fftn(zeta_grid) / ngrid;
-    zeta_g(:, imu) = zeta_fft(idx_q);
-end
+zeta_g = isdf_zeta_real_to_g(zeta_real, idx_q, fftgrid);
 
 space = struct();
 space.products = products;

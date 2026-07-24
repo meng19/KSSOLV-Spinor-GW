@@ -30,12 +30,11 @@ end
 
 if ~isfield(eps.isdf, 'algorithm') || isempty(eps.isdf.algorithm)
     if eps.freq_dep == 0
-        eps.isdf.algorithm = 'cauchy_polarizability';
+        eps.isdf.algorithm = 'reduced_basis';
     else
         eps.isdf.algorithm = 'matrix_elements';
     end
 end
-
 if ~isfield(eps.isdf, 'rank_ratio')
     eps.isdf.rank_ratio = 1;
 end
@@ -48,8 +47,12 @@ if ~isfield(eps.isdf, 'seed')
     eps.isdf.seed = 0;
 end
 
-if ~isfield(eps.isdf, 'cauchy_method') || isempty(eps.isdf.cauchy_method)
-    eps.isdf.cauchy_method = 'cauchy';
+if ~isfield(eps.isdf, 'reduced_solver') || isempty(eps.isdf.reduced_solver)
+    eps.isdf.reduced_solver = 'cauchy';
+end
+
+if ~isfield(eps.isdf, 'output') || isempty(eps.isdf.output)
+    eps.isdf.output = 'screened_w';
 end
 
 if ~isfield(eps.isdf, 'cauchy_froErr') || isempty(eps.isdf.cauchy_froErr)
@@ -60,7 +63,4 @@ if ~isfield(eps.isdf, 'cauchy_MaxIter') || isempty(eps.isdf.cauchy_MaxIter)
     eps.isdf.cauchy_MaxIter = 12;
 end
 
-if ~isfield(eps.isdf, 'store_full_inverse') || isempty(eps.isdf.store_full_inverse)
-    eps.isdf.store_full_inverse = true;
-end
 end

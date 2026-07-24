@@ -19,11 +19,11 @@ if use_gpu
     fprintf('Available GPU memory: %.2f GB\n', gpu_dev.AvailableMemory/(1024)^3);
 end
 
-use_isdf_cauchy = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && ...
+use_isdf_reduced = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && ...
     eps.isdf.enable && isfield(eps.isdf, 'algorithm') && ...
-    strcmpi(eps.isdf.algorithm, 'cauchy_polarizability');
-if use_isdf_cauchy
-    eps = isdf_epsilon_cauchy_polarizability(sys, options, syms, eps);
+    strcmpi(eps.isdf.algorithm, 'reduced_basis');
+if use_isdf_reduced
+    eps = isdf_epsilon_reduced_basis(sys, options, syms, eps);
     return;
 end
 
@@ -31,7 +31,7 @@ if isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && eps.isdf.enable && ...
         ~strcmpi(eps.isdf.algorithm, 'matrix_elements')
     error('ISDF:UnknownEpsilonAlgorithm', ...
         ['Unknown epsilon ISDF algorithm "%s". Supported algorithms: ' ...
-        'cauchy_polarizability, matrix_elements.'], eps.isdf.algorithm);
+        'reduced_basis, matrix_elements.'], eps.isdf.algorithm);
 end
 
 fprintf('System parameters: nvbands = %d, ncbands = %d, nbands = %d, nspin = %d, nspinor = %d\n', nvbands, ncbands, nbands, nspin, nspinor);
@@ -306,18 +306,8 @@ for iq = 1:sys.nkpts
     chi0_sum = chi0_sum * fact;
     
     % 计算Coulomb势
-    if strcmp(eps.coul_cut, 'spherical_truncation')
-        coulg = coulG_spherical_truncation(nmtx_current, pol.isrtx(:, iq), ekin(:, iq), eps.coul_cutoff, 0);
-        
-    elseif strcmp(eps.coul_cut, 'cell_box_truncation')
-        if iq > 1
-            error('cell_box_truncation only support one Gamma=0 calculation')
-        end
-        coulg = coulG_cell_box_truncation(pol.mtx{:, iq}, gvec, sys);
-        
-    else
-        error('Unknown truncation schemes for the Coulomb potential: %s. Please choose spherical_truncation or cell_box_truncation.', eps.coul_cut);
-    end
+    coulg = coulG_select(eps, nmtx_current, pol.isrtx(:, iq), ...
+        ekin(:, iq), 0, pol.mtx{:, iq}, gvec, sys, iq);
     
     % 计算epsilon矩阵
     if use_gpu
