@@ -20,7 +20,7 @@ options.rank = nphi * npsi;
 options.sample_method = 'qrcp';
 options.seed = 0;
 
-space = isdf_build_space(phi, psi, idx_q, fftgrid, options);
+space = isdf.build_space(conj(phi), psi, idx_q, fftgrid, options);
 
 assert(isfield(space, 'ind_mu'));
 assert(isfield(space, 'zeta_g'));

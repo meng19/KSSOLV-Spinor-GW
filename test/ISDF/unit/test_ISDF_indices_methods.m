@@ -32,7 +32,8 @@ for imethod = 1:numel(methods)
     options.kmeans_max_iter = 20;
     options.fftgrid = fftgrid;
 
-    ind_mu = isdf_indices(phi, psi, options);
+    space = isdf.build_space(conj(phi), psi, idx_q, fftgrid, options);
+    ind_mu = space.ind_mu;
     assert(numel(ind_mu) == rank_mu, ...
         '%s returned %d points instead of %d.', methods{imethod}, numel(ind_mu), rank_mu);
     assert(numel(unique(ind_mu)) == rank_mu, ...
@@ -47,7 +48,7 @@ options.sample_method = 'qrcp_randomized';
 options.seed = 9;
 options.fftgrid = fftgrid;
 
-actual = isdf_matrix_elements_from_real(phi, psi, idx_q, fftgrid, options);
+actual = isdf.matrix_elements(conj(phi), psi, idx_q, fftgrid, options);
 direct = zeros(length(idx_q), nphi, npsi);
 for iphi = 1:nphi
     for ipsi = 1:npsi

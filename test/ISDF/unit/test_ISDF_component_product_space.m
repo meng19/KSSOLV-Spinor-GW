@@ -10,7 +10,6 @@ cd(repo_root);
 KSSOLV_startup;
 
 rng(23, 'twister');
-
 fftgrid = [4, 3, 2];
 nfft = prod(fftgrid);
 nleft = 2;
@@ -18,149 +17,105 @@ nright = 3;
 ncomponents = 2;
 idx_q = [1; 2; 5; 9; 13; 24];
 
-left_components = cell(1, ncomponents);
-right_components = cell(1, ncomponents);
+left = cell(1, ncomponents);
+right = cell(1, ncomponents);
 for icomponent = 1:ncomponents
-    left_components{icomponent} = randn(nfft, nleft) + 1i * randn(nfft, nleft);
-    right_components{icomponent} = randn(nfft, nright) + 1i * randn(nfft, nright);
+    left{icomponent} = randn(nfft, nleft) + ...
+        1i * randn(nfft, nleft);
+    right{icomponent} = randn(nfft, nright) + ...
+        1i * randn(nfft, nright);
 end
 
-products = isdf_component_products(left_components, right_components);
-subset_products = isdf_component_products(left_components, right_components, idx_q);
-subset_products_ref = products(idx_q, :);
-assert(max(abs(subset_products(:) - subset_products_ref(:))) < 1e-12, ...
-    'Component products with grid_indices should match selected full-product rows.');
+products = zeros(nfft, nleft * nright);
+for iright = 1:nright
+    for ileft = 1:nleft
+        column = ileft + (iright - 1) * nleft;
+        for icomponent = 1:ncomponents
+            products(:, column) = products(:, column) + ...
+                conj(left{icomponent}(:, ileft)) .* ...
+                right{icomponent}(:, iright);
+        end
+    end
+end
 
-single_subset_products = isdf_component_products({left_components{1}}, ...
-    {right_components{1}}, idx_q);
-single_subset_ref = isdf_prod_states(conj(left_components{1}(idx_q, :)), ...
-    right_components{1}(idx_q, :));
-assert(max(abs(single_subset_products(:) - single_subset_ref(:))) < 1e-12, ...
-    'Single-component indexed products should match scalar product states.');
-
-component_weight = isdf_component_product_weight(left_components, right_components);
-component_weight_ref = sum(abs(products).^2, 2);
-assert(max(abs(component_weight(:) - component_weight_ref(:))) < 1e-10, ...
-    'Component product weight should match explicit product row norms.');
-
-projection = randn(nleft * nright, 4) + 1i * randn(nleft * nright, 4);
-projected_products = isdf_component_products_projected( ...
-    left_components, right_components, projection);
-projected_products_ref = products * projection;
-assert(max(abs(projected_products(:) - projected_products_ref(:))) < 1e-10, ...
-    'Projected component products should match explicit product projection.');
-
-direct = zeros(length(idx_q), nleft * nright);
+direct = zeros(numel(idx_q), size(products, 2));
 for ipair = 1:size(products, 2)
     product_grid = reshape(products(:, ipair), fftgrid);
     product_g = fftn(product_grid) / nfft;
     direct(:, ipair) = product_g(idx_q);
 end
 
-ind_mu_ref = [2; 7; 11; 18; 21; 24];
-[component_c1, component_c2] = isdf_product_gram( ...
-    left_components, right_components, ind_mu_ref);
-component_products_mu = products(ind_mu_ref, :);
-component_c1_ref = products * component_products_mu';
-component_c2_ref = component_products_mu * component_products_mu';
-assert(max(abs(component_c1(:) - component_c1_ref(:))) < 1e-12, ...
-    'Component product Gram c1 should match explicit product matrix.');
-assert(max(abs(component_c2(:) - component_c2_ref(:))) < 1e-12, ...
-    'Component product Gram c2 should match explicit product matrix.');
-
-scalar_products = isdf_prod_states(conj(left_components{1}), right_components{1});
-[scalar_c1, scalar_c2] = isdf_product_gram( ...
-    {left_components{1}}, {right_components{1}}, ind_mu_ref);
-scalar_products_mu = scalar_products(ind_mu_ref, :);
-scalar_c1_ref = scalar_products * scalar_products_mu';
-scalar_c2_ref = scalar_products_mu * scalar_products_mu';
-assert(max(abs(scalar_c1(:) - scalar_c1_ref(:))) < 1e-12, ...
-    'Single-component product Gram c1 should match explicit product matrix.');
-assert(max(abs(scalar_c2(:) - scalar_c2_ref(:))) < 1e-12, ...
-    'Single-component product Gram c2 should match explicit product matrix.');
-
-isdf_options.rank = nleft * nright;
-isdf_options.sample_method = 'qrcp';
-isdf_options.seed = 0;
-space = isdf_build_space(left_components, right_components, idx_q, fftgrid, isdf_options);
+options.rank = nleft * nright;
+options.sample_method = 'qrcp';
+options.seed = 0;
+space = isdf.build_space(left, right, idx_q, fftgrid, options);
 actual = space.zeta_g * space.product_mu;
-
 max_error = max(abs(actual(:) - direct(:)));
 assert(max_error < 1e-10, ...
-    'Component product-space ISDF differs from direct FFT result: %.3e', max_error);
+    'Component product-space ISDF differs from direct FFT: %.3e', ...
+    max_error);
+selected_products = products(space.ind_mu, :);
+assert(max(abs(space.product_mu(:) - selected_products(:))) < 1e-12);
 
 ev_occ = [-0.9; -0.2];
 ev_unocc = [0.4; 0.8; 1.5];
-direct_options.method = 'direct';
-direct_coeff = isdf_comega_cstar(space.left_mu_components, ...
-    space.right_mu_components, ev_occ, ev_unocc, direct_options);
-
-cauchy_options.method = 'cauchy';
-cauchy_options.froErr = 1e-10;
-cauchy_options.MaxIter = 10;
-[cauchy_coeff, cauchy_info] = isdf_comega_cstar(space.left_mu_components, ...
-    space.right_mu_components, ev_occ, ev_unocc, cauchy_options);
-
-relative_error = norm(direct_coeff - cauchy_coeff, 'fro') / ...
-    max(1, norm(direct_coeff, 'fro'));
+direct_polar = isdf.polarizability(space, ev_occ, ev_unocc, ...
+    struct('method', 'direct'));
+cauchy_polar = isdf.polarizability(space, ev_occ, ev_unocc, ...
+    struct('method', 'cauchy', 'froErr', 1e-10, 'MaxIter', 10));
+relative_error = norm(direct_polar.coeff - cauchy_polar.coeff, 'fro') / ...
+    max(1, norm(direct_polar.coeff, 'fro'));
 assert(relative_error < 1e-8, ...
     'Component Cauchy coefficient mismatch: %.3e', relative_error);
 
-fprintf('Component product-space ISDF test passed. max_error = %.3e, cauchy_error = %.3e, iterations = %d\n', ...
-    max_error, relative_error, cauchy_info.iterations);
+single_products = zeros(nfft, nleft * nright);
+for iright = 1:nright
+    for ileft = 1:nleft
+        column = ileft + (iright - 1) * nleft;
+        single_products(:, column) = conj(left{1}(:, ileft)) .* ...
+            right{1}(:, iright);
+    end
+end
+single_space = isdf.build_space(left{1}, right{1}, ...
+    idx_q, fftgrid, options);
+assert(isequal(single_space.left_mu_components{1}, ...
+    left{1}(single_space.ind_mu, :)));
+assert(isequal(single_space.right_mu_components{1}, ...
+    right{1}(single_space.ind_mu, :)));
+single_direct = zeros(numel(idx_q), size(single_products, 2));
+for ipair = 1:size(single_products, 2)
+    product_g = fftn(reshape(single_products(:, ipair), fftgrid)) / nfft;
+    single_direct(:, ipair) = product_g(idx_q);
+end
+single_actual = single_space.zeta_g * single_space.product_mu;
+single_error = max(abs(single_actual(:) - single_direct(:)));
+assert(single_error < 1e-10, ...
+    'Single-component product-space mismatch: %.3e', single_error);
 
-scalar_phi = conj(left_components{1});
-scalar_psi = right_components{1};
-scalar_space = isdf_build_space(scalar_phi, scalar_psi, idx_q, fftgrid, isdf_options);
-single_component_space = isdf_build_space({left_components{1}}, {right_components{1}}, ...
-    idx_q, fftgrid, isdf_options);
+randomized_options = options;
+randomized_options.sample_method = 'qrcp_randomized';
+randomized_options.random_oversampling = 1;
+randomized_space = isdf.build_space(left, right, ...
+    idx_q, fftgrid, randomized_options);
+randomized_actual = randomized_space.zeta_g * randomized_space.product_mu;
+randomized_error = max(abs(randomized_actual(:) - direct(:)));
+assert(randomized_error < 1e-10, ...
+    'Randomized component ISDF differs from direct FFT: %.3e', ...
+    randomized_error);
+assert(~isfield(randomized_space, 'products'));
 
-assert(isfield(single_component_space, 'phi_mu'));
-assert(isfield(single_component_space, 'psi_mu'));
-assert(isequal(single_component_space.left_mu_components{1}, left_components{1}(scalar_space.ind_mu, :)));
-assert(isequal(single_component_space.right_mu_components{1}, scalar_space.psi_mu));
-assert(isequal(conj(single_component_space.left_mu_components{1}), scalar_space.phi_mu));
-
-scalar_product_mu = isdf_prod_states(scalar_space.phi_mu, scalar_space.psi_mu);
-assert(max(abs(single_component_space.product_mu(:) - scalar_product_mu(:))) < 1e-12, ...
-    'Single-component product_mu should match scalar product_mu.');
-
-single_component_reconstruction = single_component_space.zeta_g * single_component_space.product_mu;
-scalar_reconstruction = scalar_space.zeta_g * scalar_product_mu;
-single_component_error = max(abs(single_component_reconstruction(:) - scalar_reconstruction(:)));
-assert(single_component_error < 1e-10, ...
-    'Single-component space should reuse scalar ISDF representation: %.3e', ...
-    single_component_error);
-
-fprintf('Single-component fast-path test passed. max_error = %.3e\n', ...
-    single_component_error);
-
-matrix_free_options = isdf_options;
-matrix_free_options.sample_method = 'qrcp_randomized';
-matrix_free_options.random_oversampling = 1;
-matrix_free_space = isdf_build_space(left_components, right_components, ...
-    idx_q, fftgrid, matrix_free_options);
-matrix_free_reconstruction = matrix_free_space.zeta_g * matrix_free_space.product_mu;
-matrix_free_error = max(abs(matrix_free_reconstruction(:) - direct(:)));
-assert(matrix_free_error < 1e-10, ...
-    'Matrix-free randomized component ISDF differs from direct FFT result: %.3e', ...
-    matrix_free_error);
-assert(~isfield(matrix_free_space, 'products'), ...
-    'Matrix-free randomized component ISDF should not store explicit products.');
-
-kmeans_options = isdf_options;
+kmeans_options = options;
 kmeans_options.sample_method = 'kmeans';
 kmeans_options.kmeans_max_iter = 4;
 kmeans_options.kmeans_replicates = 1;
-kmeans_space = isdf_build_space(left_components, right_components, ...
+kmeans_space = isdf.build_space(left, right, ...
     idx_q, fftgrid, kmeans_options);
-kmeans_reconstruction = kmeans_space.zeta_g * kmeans_space.product_mu;
-kmeans_error = max(abs(kmeans_reconstruction(:) - direct(:)));
+kmeans_actual = kmeans_space.zeta_g * kmeans_space.product_mu;
+kmeans_error = max(abs(kmeans_actual(:) - direct(:)));
 assert(kmeans_error < 1e-10, ...
-    'Matrix-free kmeans component ISDF differs from direct FFT result: %.3e', ...
-    kmeans_error);
-assert(~isfield(kmeans_space, 'products'), ...
-    'Matrix-free kmeans component ISDF should not store explicit products.');
+    'K-means component ISDF differs from direct FFT: %.3e', kmeans_error);
+assert(~isfield(kmeans_space, 'products'));
 
-fprintf('Matrix-free component product-space tests passed. randomized_error = %.3e, kmeans_error = %.3e\n', ...
-    matrix_free_error, kmeans_error);
+fprintf(['Component package ISDF tests passed. qrcp = %.3e, ' ...
+    'single = %.3e, randomized = %.3e, kmeans = %.3e, cauchy = %.3e\n'], ...
+    max_error, single_error, randomized_error, kmeans_error, relative_error);

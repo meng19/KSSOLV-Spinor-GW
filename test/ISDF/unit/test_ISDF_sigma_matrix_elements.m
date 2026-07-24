@@ -30,7 +30,8 @@ isdf_options.rank = nbands;
 isdf_options.sample_method = 'qrcp';
 isdf_options.seed = 9;
 
-gme3 = isdf_matrix_elements_from_real(conj(state_real(:)), sum_real, idx_q, fftgrid, isdf_options);
+gme3 = isdf.matrix_elements(state_real(:), sum_real, ...
+    idx_q, fftgrid, isdf_options);
 actual = reshape(gme3, length(idx_q), size(sum_real, 2));
 
 max_error = max(abs(actual(:) - direct(:)));

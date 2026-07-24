@@ -18,10 +18,10 @@ ev_occ = [-0.8; -0.4; -0.1];
 ev_unocc = [0.3; 0.7; 1.0; 1.4];
 
 direct_options = struct('method', 'direct');
-direct = isdf_reduced_polarizability(vc_space, ev_occ, ev_unocc, direct_options);
+direct = isdf.polarizability(vc_space, ev_occ, ev_unocc, direct_options);
 
 cauchy_options = struct('method', 'cauchy', 'froErr', 1e-10, 'MaxIter', 8);
-cauchy = isdf_reduced_polarizability(vc_space, ev_occ, ev_unocc, cauchy_options);
+cauchy = isdf.polarizability(vc_space, ev_occ, ev_unocc, cauchy_options);
 
 relerr = norm(direct.coeff - cauchy.coeff, 'fro') / max(1, norm(direct.coeff, 'fro'));
 assert(relerr < 1e-8, 'Reduced polarizability differs from direct: %.3e', relerr);
@@ -33,12 +33,21 @@ component_space.left_mu_components = { ...
 component_space.right_mu_components = { ...
     randn(nmu, nc) + 1i * randn(nmu, nc), ...
     randn(nmu, nc) + 1i * randn(nmu, nc)};
-component_polar = isdf_reduced_polarizability( ...
+component_polar = isdf.polarizability( ...
     component_space, ev_occ, ev_unocc, direct_options);
-component_ref = isdf_comega_cstar( ...
-    component_space.left_mu_components, ...
-    component_space.right_mu_components, ...
-    ev_occ, ev_unocc, direct_options);
+component_ref = zeros(nmu);
+for iv = 1:nv
+    for ic = 1:nc
+        coefficient = zeros(nmu, 1);
+        for ispinor = 1:numel(component_space.left_mu_components)
+            coefficient = coefficient + conj( ...
+                component_space.left_mu_components{ispinor}(:, iv)) .* ...
+                component_space.right_mu_components{ispinor}(:, ic);
+        end
+        component_ref = component_ref + coefficient * coefficient' / ...
+            (ev_occ(iv) - ev_unocc(ic));
+    end
+end
 assert(norm(component_polar.coeff - component_ref, 'fro') < 1e-12, ...
     'Reduced polarizability must preserve spinor component cross terms.');
 

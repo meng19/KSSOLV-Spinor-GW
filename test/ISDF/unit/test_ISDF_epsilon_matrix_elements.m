@@ -36,7 +36,8 @@ isdf_options.rank = nv * nc;
 isdf_options.sample_method = 'qrcp';
 isdf_options.seed = 7;
 
-actual = isdf_matrix_elements_from_real(phi, psi, idx_q, fftgrid, isdf_options);
+actual = isdf.matrix_elements(valence_real, conduction_real, ...
+    idx_q, fftgrid, isdf_options);
 
 max_error = max(abs(actual(:) - direct(:)));
 assert(max_error < 1e-10, ...

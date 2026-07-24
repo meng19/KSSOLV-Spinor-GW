@@ -33,7 +33,7 @@ isdf_options.rank = nphi * npsi;
 isdf_options.sample_method = 'qrcp';
 isdf_options.seed = 12;
 
-actual = isdf_matrix_elements_from_real(phi, psi, idx_q, fftgrid, isdf_options);
+actual = isdf.matrix_elements(conj(phi), psi, idx_q, fftgrid, isdf_options);
 
 max_error = max(abs(actual(:) - direct(:)));
 assert(max_error < 1e-10, ...
