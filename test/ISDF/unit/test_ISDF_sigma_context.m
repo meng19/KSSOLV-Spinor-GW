@@ -1,0 +1,45 @@
+script_dir = fileparts(mfilename('fullpath'));
+repo_root = fileparts(fileparts(fileparts(script_dir)));
+addpath(repo_root);
+old_dir = pwd;
+cleanup = onCleanup(@() cd(old_dir));
+cd(repo_root);
+KSSOLV_startup;
+
+[sys, options, syms] = read_qe_gw( ...
+    '.\example\qe_data\mos2_222_spinor', 1);
+[sys, options] = gw_setup(sys, options);
+
+eps.cutoff = 2;
+eps.freq_dep = 0;
+eps.nfreq = 1;
+eps.freq = 0;
+eps.inv = cell(sys.nkpts, 1);
+
+sig.nbnd = 29;
+sig.ndiag_min = 29;
+sig.ndiag_max = 29;
+sig.freq_dep = 0;
+sig.coul_cut = 'spherical_truncation';
+sig.coul_cutoff = 2;
+sig.use_gpu = 0;
+sig.precompute_wav = 0;
+sig = sigma_set_defaults(sig);
+
+probe = sigma_context(eps, sig, sys, options, syms, true);
+for iq = 1:sys.nkpts
+    eps.inv{iq} = eye(probe.sig.nmtx(iq));
+end
+ctx = sigma_context(eps, sig, sys, options, syms, false);
+
+assert(strcmp(ctx.method, 'direct'));
+assert(ctx.nk == sys.nkpts);
+assert(ctx.nspinor == 2);
+assert(numel(ctx.kdata) == sys.nkpts);
+block = sigma_prepare_block(ctx, 1, 1, 29, 1, []);
+assert(block.ik == 1 && block.iq == 1 && block.in == 29);
+assert(isfield(block, 'coulg') && isfield(block, 'coulg_cutoff'));
+assert(isfield(block, 'eps_inv'));
+assert(numel(block.occ_kq) == sig.nbnd);
+
+fprintf('ISDF sigma context/block test passed.\n');

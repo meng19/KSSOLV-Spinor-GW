@@ -1,48 +1,39 @@
 function sig = sigma(eps, sig, sys, options, syms)
 sig = sigma_set_defaults(sig);
-%% Initialize some value
-ryd = 13.6056923;
-nbands = sig.nbnd;
-ndiag_min = sig.ndiag_min;
-ndiag_max = sig.ndiag_max;
-wfc_cutoff = sys.ecut * 2; % Ha --> Ry
-nspin = sys.nspin;
-nspinor = sys.nspinor;
+ctx = sigma_context(eps, sig, sys, options, syms);
+sig = ctx.sig;
+ryd = ctx.ryd;
+nbands = ctx.nbands;
+ndiag_min = ctx.band_range(1);
+ndiag_max = ctx.band_range(end);
+wfc_cutoff = ctx.wfc_cutoff;
+nspin = ctx.nspin;
+nspinor = ctx.nspinor;
+use_gpu = ctx.use_gpu;
+gvec = ctx.gvec;
+gr = ctx.gr;
+fact = ctx.fact;
+fft = ctx.fft;
+ekin = ctx.ekin_fbz;
+fbz = ctx.fbz;
+eps_inv_fbz = ctx.eps_inv_fbz;
+screened_fbz = ctx.screened_fbz; %#ok<NASGU>
+precompute_wav = sig.precompute_wav;
+no_symmetries_q_grid = sig.no_symmetries_q_grid;
 
 % 添加GPU支持标志
-use_gpu = sig.use_gpu && exist('gpuDevice', 'file'); % 检查GPU是否可用
 if use_gpu
     fprintf('GPU acceleration enabled for sigma calculation\n');
     gpu_dev = gpuDevice();
     fprintf('Using GPU: %s\n', gpu_dev.Name);
 end
 
-use_isdf = isfield(sig, 'isdf') && isfield(sig.isdf, 'enable') && sig.isdf.enable;
-if use_isdf && use_gpu
-    error('ISDF:SigmaGPUUnsupported', ...
-        'ISDF sigma path currently supports CPU execution only. Set sig.use_gpu = 0.');
-end
-
-if use_isdf && isfield(sig.isdf, 'algorithm') && strcmpi(sig.isdf.algorithm, 'reduced_basis')
-    if use_gpu
-        error('ISDF:ReducedSigmaGPU', ...
-            'ISDF reduced-basis sigma currently supports CPU execution only.');
-    end
-    if sig.freq_dep ~= 0
-        error('ISDF:ReducedSigmaFrequency', ...
-            'ISDF reduced-basis sigma requires sig.freq_dep = 0.');
-    end
+if strcmp(ctx.method, 'reduced_basis')
     sig = isdf_sigma_reduced_basis(eps, sig, sys, options, syms);
     return;
 end
 
-if use_isdf && ~strcmpi(sig.isdf.algorithm, 'matrix_elements')
-    error('ISDF:UnknownSigmaAlgorithm', ...
-        ['Unknown sigma ISDF algorithm "%s". Supported algorithms: ' ...
-        'reduced_basis, matrix_elements.'], sig.isdf.algorithm);
-end
-
-use_isdf_matrix_elements = use_isdf && strcmpi(sig.isdf.algorithm, 'matrix_elements');
+use_isdf_matrix_elements = strcmp(ctx.method, 'matrix_elements');
 
 ndiag = ndiag_max - ndiag_min + 1;
 aqsch = cell(nbands, nspin);
@@ -50,60 +41,12 @@ asx = zeros([ndiag sys.nkpts nspin]);
 ax = zeros([ndiag sys.nkpts nspin]);
 ach = zeros([ndiag sys.nkpts nspin]);
 achx = zeros([ndiag sys.nkpts nspin]);
-sigrid = Ggrid(sys, 4 * sys.ecut);
-gvec = Gvector(sigrid,sys);
-no_symmetries_q_grid = sig.no_symmetries_q_grid;
-sig.qpt = options.kpts;
-sig.nkn = sys.nkpts;
-
 % 添加Full frequency支持
 if sig.freq_dep == 2 && sig.freq_dep_method == 2
-    if sig.freq_grid_shift == 2
-        sig.nfreq_grid = 2 * fix(sig.max_freq_eval/sig.delta_freq_eval) + 1; % For Residue of Σ_CH
-        sig.freq_grid = 0:sig.delta_freq_eval:2*sig.max_freq_eval;
-    end
-    sig.nfreq_integral = eps.nfreq; % For integral of Σ_CH
-    sig.freq_integral = eps.freq;
-    sig.nfreq_integral_imag = eps.nfreq_imag;
-    sig.nfreq_integral_real = eps.nfreq - eps.nfreq_imag;
+    % Frequency grids and integration fields are initialized by sigma_context.
 elseif sig.freq_dep == 0
-    sig.nfreq_grid = 1;
+    % Static COHSEX uses the single zero-frequency grid from sigma_context.
 end
-%%
-gr = fullbz(options, syms, true);
-fact = 1/(gr.nf * sys.vol);
-coulfact = 8 * pi * fact;
-eps_inv_fbz = cell([gr.nf 1]);
-
-for ik = 1 : sig.nkn
-    rk = sig.qpt(ik, :);
-    [ekin(:,ik), sig.isrtx(:,ik)] = sortrx(rk, gvec.ng, gvec.mill, sys);
-    sig.nmtx(:,ik) = gcutoff(gvec.ng, ekin(:,ik), sig.isrtx(:,ik), eps.cutoff);
-    sig.mtx{:, ik} = gvec.mill(sig.isrtx(1:sig.nmtx(ik), ik), :);
-end
-
-for ik = 1 : gr.nf
-    rk = gr.f(ik, :);
-    [ekin(:,ik), fbz.isrtx(:,ik)] = sortrx(rk, gvec.ng, gvec.mill, sys);
-    % fbz is for q-points
-    fbz.nmtx(:,ik) = gcutoff(gvec.ng, ekin(:,ik), fbz.isrtx(:,ik), wfc_cutoff);
-    fbz.mtx{:, ik} = gvec.mill(fbz.isrtx(1:fbz.nmtx(ik), ik), :);
-    fbz.nmtx_cutoff(:,ik) = gcutoff(gvec.ng, ekin(:,ik), fbz.isrtx(:,ik), eps.cutoff);
-    fbz.mtx_cutoff{:, ik} = gvec.mill(fbz.isrtx(1:fbz.nmtx_cutoff(ik), ik), :);
-    
-    %% gmap for eps_inv
-    itran = gr.itran(ik);
-    qk = gr.r(gr.indr(ik),:) * syms.mtrx{itran,:};
-    [~, kgq] = krange(qk, 1e-9);
-    for i = 1 : gvec.ng
-        isorti(sig.isrtx(i, gr.indr(ik)), 1) = i;
-    end
-    fbz.isorti(:, ik) = isorti;
-    indt = gmap(gvec, syms, sig.nmtx(:,gr.indr(ik)), itran, kgq, fbz.isrtx(:,ik) ,isorti, sys);
-    eps_inv_fbz{ik} = eps.inv{gr.indr(ik)}(indt, indt, :);
-end
-
-precompute_wav = sig.precompute_wav;
 if precompute_wav
     % Precompute wavefunctions for all k-points and spins
     fprintf('Precomputing wavefunctions...\n');
@@ -114,27 +57,16 @@ if precompute_wav
     % 计算预计算总数
     precompute_total = 0;
     for ik = 1:sig.nkn
-        rk = sig.qpt(ik, :);
-        syms_rk = subgrp(rk, syms);
-        [nrk, neq, indrk] = irrbz(syms_rk, gr);
-        if no_symmetries_q_grid
-            nrk = gr.nf;
-            indrk = (1:nrk);
-            neq = ones(1, nrk);
-        end
-        precompute_total = precompute_total + nrk;
+        kdata = ctx.kdata{ik};
+        precompute_total = precompute_total + kdata.nrk;
     end
     
     precompute_count = 0;
     for ik = 1:sig.nkn
-        rk = sig.qpt(ik, :);
-        syms_rk = subgrp(rk, syms);
-        [nrk, neq, indrk] = irrbz(syms_rk, gr);
-        if no_symmetries_q_grid
-            nrk = gr.nf;
-            indrk = (1:nrk);
-            neq = ones(1, nrk);
-        end
+        kdata = ctx.kdata{ik};
+        rk = kdata.rk;
+        nrk = kdata.nrk;
+        indrk = kdata.indrk;
         for iq = 1:nrk
             qq = gr.f(indrk(iq), :);
             precompute_count = precompute_count + 1;
@@ -157,26 +89,6 @@ else
     fprintf('No precomputation of wav to save memory.\n');
 end
 
-%% set up fft_grid
-grid_size = [sys.n1, sys.n2, sys.n3];
-
-if use_gpu
-    try
-        fft.Nfft1 = gpuArray.zeros(grid_size);
-        fft.Nfft2 = gpuArray.zeros(grid_size);
-        use_gpu = true;
-    catch
-        warning('GPU memory insufficient for FFT grids. Falling back to CPU.');
-        fft.Nfft1 = zeros(grid_size);
-        fft.Nfft2 = zeros(grid_size);
-        use_gpu = false;
-    end
-else
-    fft.Nfft1 = zeros(grid_size);
-    fft.Nfft2 = zeros(grid_size);
-end
-fft.size = prod(grid_size);
-
 fprintf('Starting sigma calculation loop over spins and bands...\n');
 
 for ispin = 1 : nspin
@@ -188,7 +100,8 @@ for ispin = 1 : nspin
         current_iteration = 0;
         for ik = 1 : sig.nkn
             current_iteration = current_iteration + 1;
-            rk = sig.qpt(ik, :);
+            kdata = ctx.kdata{ik};
+            rk = kdata.rk;
             
             % 使用print_progress函数更新进度条（每10%刷新）
             print_progress(current_iteration, total_iterations, ...
@@ -213,8 +126,10 @@ for ispin = 1 : nspin
                 end
             end
             
-            syms_rk = subgrp(rk, syms);
-            [nrk, neq, indrk] = irrbz(syms_rk, gr);
+            syms_rk = kdata.syms;
+            nrk = kdata.nrk;
+            neq = kdata.neq;
+            indrk = kdata.indrk;
             
             if precompute_wav
                 % Use precomputed wfnk
@@ -222,12 +137,6 @@ for ispin = 1 : nspin
             else
                 wfnk = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
             end
-            if no_symmetries_q_grid
-                nrk = gr.nf;
-                indrk = (1:nrk);
-                neq = ones(1, nrk);
-            end
-            
             % 预计算neq的GPU版本
             if use_gpu
                 neq = gpuArray(neq);
