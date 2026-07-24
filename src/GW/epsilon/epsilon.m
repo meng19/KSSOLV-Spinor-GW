@@ -1,17 +1,24 @@
 function eps = epsilon(sys, options, syms, eps)
 eps = epsilon_set_defaults(eps);
-%% Initialize some value
-ryd = 13.6056923;
+ctx = epsilon_context(sys, options, syms, eps);
+ryd = ctx.ryd;
+nbands = ctx.nbands;
+nspin = ctx.nspin;
+nspinor = ctx.nspinor;
+wfc_cutoff = ctx.wfc_cutoff;
+save_mem = ctx.save_mem;
+use_gpu = ctx.use_gpu;
+gvec = ctx.gvec;
+gr = ctx.gr;
+pol = ctx.pol;
+ekin = ctx.ekin;
+fact = ctx.fact;
+precompute_wav = ctx.precompute_wav;
+
 nvbands = eps.nv;
 ncbands = eps.nc;
-nbands = eps.nbnd;
-nspin = sys.nspin;
-nspinor = sys.nspinor;
-wfc_cutoff = sys.ecut * 2; % Ha --> Ry
-save_mem = eps.save_mem;
 
 % 添加GPU支持
-use_gpu = eps.use_gpu && exist('gpuDevice', 'file');
 if use_gpu
     fprintf('GPU acceleration enabled for epsilon calculation\n');
     gpu_dev = gpuDevice();
@@ -19,68 +26,25 @@ if use_gpu
     fprintf('Available GPU memory: %.2f GB\n', gpu_dev.AvailableMemory/(1024)^3);
 end
 
-use_isdf_reduced = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && ...
-    eps.isdf.enable && isfield(eps.isdf, 'algorithm') && ...
-    strcmpi(eps.isdf.algorithm, 'reduced_basis');
+use_isdf_reduced = strcmp(ctx.method, 'reduced_basis');
 if use_isdf_reduced
     eps = isdf_epsilon_reduced_basis(sys, options, syms, eps);
     return;
 end
 
-if isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && eps.isdf.enable && ...
-        ~strcmpi(eps.isdf.algorithm, 'matrix_elements')
-    error('ISDF:UnknownEpsilonAlgorithm', ...
-        ['Unknown epsilon ISDF algorithm "%s". Supported algorithms: ' ...
-        'reduced_basis, matrix_elements.'], eps.isdf.algorithm);
-end
-
 fprintf('System parameters: nvbands = %d, ncbands = %d, nbands = %d, nspin = %d, nspinor = %d\n', nvbands, ncbands, nbands, nspin, nspinor);
-
-sigrid = Ggrid(sys, 4*sys.ecut);
-gvec = Gvector(sigrid, sys);
-pol.qpt = options.kpts;
 
 % 添加Full frequency支持
 if eps.freq_dep == 2 && eps.freq_dep_method == 2
-    pol.nfreq_rel = fix(eps.freq_cutoff/eps.delta_freq) + 1;
-    pol.nfreq = pol.nfreq_rel + eps.nfreq_imag;
-    pol.freq_grid = 0:eps.delta_freq:eps.freq_cutoff;
-    tmp_freq_brd = 0:1:eps.nfreq_imag - 1;
-    pol.freq_brd = -2i * ryd * tmp_freq_brd ./ (tmp_freq_brd - eps.nfreq_imag);
-    pol.freq = [pol.freq_grid, pol.freq_brd];
-    
     % 初始化频率相关的存储结构
     fprintf('Initializing full frequency-dependent calculation with %d frequencies\n', pol.nfreq);
 else
     % 非频率依赖静态COHSEX计算：视为只有一个频率0的特例
-    pol.nfreq = 1;
-    pol.freq = 0;
     fprintf('Initializing static calculation (frequency = 0)\n');
 end
-%%
-gr = fullbz(options, syms, true);
-ekin = zeros(gvec.ng, sys.nkpts);
-for iq = 1:sys.nkpts
-    qq = pol.qpt(iq,:);
-    [ekin(:,iq), pol.isrtx(:,iq)] = sortrx(qq, gvec.ng, gvec.mill, sys);
-    pol.nmtx(:,iq) = gcutoff(gvec.ng, ekin(:,iq), pol.isrtx(:,iq), eps.cutoff);
-    pol.mtx{:, iq} = gvec.mill(pol.isrtx(1:pol.nmtx(iq), iq), :);
-    
-    %% get fftsize for calculating M matrix
-    eps_box_min = zeros([1 3]);
-    eps_box_max = zeros([1 3]);
-    [eps_box_min, eps_box_max] = get_gvecs_bounds(pol.mtx{:, iq}, eps_box_min, eps_box_max);
-    pol.fftgrid{:, iq} = min((options.wfn_fftgrid + eps_box_max - eps_box_min), options.fftgrid);
-end
-
-% 清空不必要的变量
-clear sigrid;
 
 eps_tmp = cell(sys.nkpts, 1);
 eps_inv = cell(sys.nkpts, 1);
-fact = 4 / (gr.nf * sys.vol * nspin * nspinor);
-
-precompute_wav = eps.precompute_wav;
 
 %% Precompute wavefunctions for all k-points and spins
 if precompute_wav
@@ -224,8 +188,7 @@ for iq = 1:sys.nkpts
                 continue;
             end
 
-            use_isdf = isfield(eps, 'isdf') && isfield(eps.isdf, 'enable') && ...
-                eps.isdf.enable && strcmpi(eps.isdf.algorithm, 'matrix_elements');
+            use_isdf = strcmp(ctx.method, 'matrix_elements');
             if use_isdf
                 if use_gpu
                     error('ISDF:EpsilonGPUUnsupported', ...
