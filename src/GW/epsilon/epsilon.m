@@ -18,12 +18,6 @@ if use_gpu
     fprintf('Available GPU memory: %.2f GB\n', gpu_dev.AvailableMemory/(1024)^3);
 end
 
-use_isdf_reduced = strcmp(ctx.method, 'reduced_basis');
-if use_isdf_reduced
-    eps = isdf_epsilon_reduced_basis(sys, options, syms, eps);
-    return;
-end
-
 fprintf('System parameters: nvbands = %d, ncbands = %d, nbands = %d, nspin = %d, nspinor = %d\n', ...
     nvbands, ncbands, nbands, nspin, nspinor);
 
@@ -80,7 +74,6 @@ end
 %% Main loop
 fprintf('Starting main epsilon calculation loop...\n');
 ops = epsilon_ops(ctx);
-eps.inv = cell(ctx.nq, 1);
 
 for iq = 1:ctx.nq
     qdata = ctx.qdata{iq};

@@ -14,8 +14,104 @@ switch ctx.method
             local_accumulate_full(ctx, acc, contribution, block);
         ops.finalize = @(eps, acc, iq) local_finalize_full(ctx, eps, acc, iq);
     case 'reduced_basis'
-        error('ISDF:ReducedEpsilonNotIntegrated', ...
-            'Reduced epsilon is integrated in the next migration task.');
+        ops.init = @(iq) local_init_reduced(ctx, iq);
+        ops.evaluate = @(block) local_evaluate_reduced(ctx, block);
+        ops.accumulate = @(acc, contribution, block) ...
+            local_accumulate_reduced(ctx, acc, contribution, block);
+        ops.finalize = @(eps, acc, iq) ...
+            local_finalize_reduced(ctx, eps, acc, iq);
+end
+end
+
+function acc = local_init_reduced(ctx, iq)
+output_mode = lower(ctx.eps.isdf.output);
+acc.need_full_inverse = any(strcmp(output_mode, {'full_inverse', 'both'}));
+acc.need_screened_w = any(strcmp(output_mode, {'screened_w', 'both'}));
+if ~acc.need_full_inverse && ~acc.need_screened_w
+    error('ISDF:ReducedEpsilonOutput', ...
+        'Unknown ISDF reduced-basis epsilon output "%s".', ...
+        ctx.eps.isdf.output);
+end
+if acc.need_full_inverse
+    acc.chi0 = zeros(ctx.pol.nmtx(iq));
+else
+    acc.chi0 = [];
+end
+acc.zeta_blocks = {};
+acc.coeff_blocks = {};
+acc.rank = cell(ctx.nspin, ctx.qdata{iq}.nrq);
+acc.info = cell(ctx.nspin, ctx.qdata{iq}.nrq);
+end
+
+function contribution = local_evaluate_reduced(ctx, block)
+left = cell(1, ctx.nspinor);
+right = cell(1, ctx.nspinor);
+for ispinor = 1:ctx.nspinor
+    left{ispinor} = isdf.real_component(block.wfnkq, ...
+        block.fft.Nfft1, block.idx.kq, block.ispin, ispinor, ...
+        block.valence_bands);
+    right{ispinor} = isdf.real_component(block.wfnk, ...
+        block.fft.Nfft2, block.idx.k, block.ispin, ispinor, ...
+        block.conduction_bands);
+end
+isdf_options = ctx.eps.isdf;
+if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
+    npairs = numel(block.valence_bands) * ...
+        numel(block.conduction_bands);
+    isdf_options.rank = ceil(sqrt(npairs) * ctx.eps.isdf.rank_ratio);
+end
+space = isdf.build_space(left, right, block.idx.q, ...
+    size(block.fft.Nfft1), isdf_options);
+solver.method = ctx.eps.isdf.reduced_solver;
+solver.froErr = ctx.eps.isdf.cauchy_froErr;
+solver.MaxIter = ctx.eps.isdf.cauchy_MaxIter;
+polar = isdf.polarizability( ...
+    space, block.ev_occ, block.ev_unocc, solver);
+contribution.space = space;
+contribution.polar = polar;
+end
+
+function acc = local_accumulate_reduced(~, acc, contribution, block)
+for it = 1:numel(block.g_maps)
+    zeta_star = contribution.space.zeta_g(block.g_maps{it}, :);
+    zeta_chi = conj(zeta_star);
+    coeff_chi = conj(contribution.polar.coeff);
+    if acc.need_full_inverse
+        acc.chi0 = acc.chi0 + zeta_chi * coeff_chi * zeta_chi';
+    end
+    if acc.need_screened_w
+        acc.zeta_blocks{end + 1} = zeta_chi;
+        acc.coeff_blocks{end + 1} = coeff_chi;
+    end
+end
+acc.rank{block.ispin, block.ik} = contribution.space.rank;
+acc.info{block.ispin, block.ik} = contribution.polar.info;
+end
+
+function eps = local_finalize_reduced(ctx, eps, acc, iq)
+for ispin = 1:size(acc.rank, 1)
+    for ik = 1:size(acc.rank, 2)
+        eps.isdf_reduced_rank{iq, ispin, ik} = acc.rank{ispin, ik};
+        eps.isdf_reduced_info{iq, ispin, ik} = acc.info{ispin, ik};
+    end
+end
+
+coulg = coulG_select(ctx.eps, ctx.pol.nmtx(iq), ...
+    ctx.pol.isrtx(:, iq), ctx.ekin(:, iq), 0, ...
+    ctx.pol.mtx{:, iq}, ctx.gvec, ctx.sys, iq);
+if acc.need_full_inverse
+    epsilon_matrix = eye(ctx.pol.nmtx(iq)) - ...
+        coulg(:) .* (ctx.fact * acc.chi0);
+    eps.inv{iq} = inv(epsilon_matrix);
+end
+if acc.need_screened_w && ~isfield(eps, 'isdf_screened_w')
+    eps.isdf_screened_w = cell(ctx.nq, 1);
+end
+if acc.need_screened_w && ~isempty(acc.zeta_blocks)
+    combined_space.zeta_g = cat(2, acc.zeta_blocks{:});
+    combined_polar.coeff = ctx.fact * blkdiag(acc.coeff_blocks{:});
+    eps.isdf_screened_w{iq} = isdf.screened_w( ...
+        combined_space, coulg(:), combined_polar);
 end
 end
 
