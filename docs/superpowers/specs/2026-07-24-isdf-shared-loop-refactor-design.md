@@ -31,6 +31,7 @@
 6. 保留 reduced-basis 的低秩数据流；默认 `screened_w` 模式不得构造完整 `eps.inv`。
 7. 使用 `+isdf` package 隔离 ISDF 数值算子并精简函数名。
 8. 保持现有外部函数签名、配置字段和结果字段兼容。
+9. 保持非 ISDF 计算完全兼容：调用者无需提供 `isdf` 字段，关闭 ISDF 后所有 ISDF 专用配置均为惰性配置。
 
 ## 4. 非目标
 
@@ -63,6 +64,16 @@ sig.isdf.algorithm
 sig.isdf.reduced_solver
 sig.isdf.sample_method
 ```
+
+非 ISDF 调用遵循以下兼容规则：
+
+- `eps`/`sig` 完全没有 `isdf` 字段时，走 `direct`；
+- `isdf` 为空、不是 struct 或缺少 `enable` 时，走 `direct`；
+- `isdf.enable=false` 时无条件走 `direct`，不读取也不验证 `algorithm`、`output`、solver 或 sampling 字段；
+- 因此 `enable=false` 与非法或陈旧的 `algorithm` 同时存在时仍然走 `direct`，不抛出 ISDF 配置错误；
+- 只有 `isdf.enable=true` 时才验证 ISDF 算法和算法专用字段。
+
+`epsilon_set_defaults`/`sigma_set_defaults` 可以继续补齐默认 `isdf` struct，但 direct 行为不能依赖调用者预先提供该 struct，也不能因为新增的 ISDF 默认字段改变原始计算结果或结果字段。
 
 现有结果字段保持有效：
 
@@ -168,7 +179,7 @@ accumulator 显式传入和返回，不依赖 persistent/global 隐藏状态。
 策略在进入循环前解析一次：
 
 ```matlab
-ctx.method = resolve_method(input.isdf);
+ctx.method = resolve_method(optional_isdf_options);
 ops = epsilon_ops(ctx);
 ops = sigma_ops(ctx);
 ```
@@ -180,6 +191,8 @@ direct
 matrix_elements
 reduced_basis
 ```
+
+方法解析的优先级固定为：先判断 ISDF 是否启用，再读取算法。缺失、空、非 struct、无 `enable` 或 `enable=false` 均立即返回 `direct`；关闭状态下不得访问或验证其他 ISDF 字段。context 和共享主循环只使用规范化后的 `ctx.method`。
 
 ### 7.1 Epsilon ops
 
@@ -329,7 +342,7 @@ epsilon/sigma strategy 负责从 block 选择左右波函数和能带，通用�
 
 算法解析和模式约束在 context/ops 构造期间完成：
 
-- 未知算法；
+- 仅当 `isdf.enable=true` 时检查未知或缺失算法；
 - reduced-basis 非静态模式；
 - ISDF GPU 模式；
 - 非法 epsilon output；
@@ -383,7 +396,8 @@ method, iq, ik, ispin, in
 
 ### 12.1 结构测试
 
-- method resolution 对三种模式返回正确策略；
+- method resolution 对三种模式返回正确策略；缺失/空/非 struct 配置以及 `enable=false` 均返回 direct；
+- `enable=false` 时非法 `algorithm` 和不完整 ISDF 专用字段被忽略；
 - context 必需字段和 mapping 尺寸正确；
 - block preparation 对 scalar/spinor、单 K/多 K 正确；
 - `epsilon.m` 和 `sigma.m` 不包含 reduced-basis 提前 return；
@@ -403,6 +417,8 @@ method, iq, ik, ispin, in
 
 ### 12.3 工作流回归
 
+- 不提供 `isdf` 字段的 epsilon/sigma 与重构前 direct 基线一致；
+- `isdf.enable=false` 且带非法 `algorithm` 的 epsilon/sigma 与无 `isdf` 字段的结果一致；
 - direct vs matrix-elements；
 - direct vs reduced `full_inverse`；
 - reduced `eps.inv` vs reduced screened-W sigma；
@@ -427,3 +443,4 @@ method, iq, ik, ispin, in
 8. 所有 ISDF 单元测试、MATLAB Code Analyzer 和 `git diff --check` 通过。
 9. `+isdf` package 外不再新增全局 `isdf_*` 内部辅助函数。
 10. tag `isdf-before-shared-loop-refactor` 可以完整恢复重构前实现。
+11. 无 `isdf` 字段和 `isdf.enable=false` 的 epsilon/sigma 均保持 direct 数值与输出兼容；关闭状态下不校验任何 ISDF 专用字段。
