@@ -119,3 +119,71 @@ assert(~isfield(kmeans_space, 'products'));
 fprintf(['Component package ISDF tests passed. qrcp = %.3e, ' ...
     'single = %.3e, randomized = %.3e, kmeans = %.3e, cauchy = %.3e\n'], ...
     max_error, single_error, randomized_error, kmeans_error, relative_error);
+
+% A single-component QRCP space must retain the legacy Gram solve.  Its
+% condition estimate is for P_mu*P_mu', rather than for rectangular P_mu.
+rank_left = randn(12, 2) + 1i * randn(12, 2);
+rank_right = randn(12, 2) + 1i * randn(12, 2);
+rank_options = struct('rank', 3, 'sample_method', 'qrcp', ...
+    'seed', 4, 'rcond_tol', 1, ...
+    'warn_ill_conditioned', false, 'ill_conditioned_solver', 'pinv');
+rank_space = isdf.build_space(rank_left, rank_right, (1:12).', ...
+    [3, 4, 1], rank_options);
+
+rank_products = zeros(12, 4);
+for iright = 1:2
+    for ileft = 1:2
+        column = ileft + (iright - 1) * 2;
+        rank_products(:, column) = conj(rank_left(:, ileft)) .* ...
+            rank_right(:, iright);
+    end
+end
+rank_products_mu = rank_products(rank_space.ind_mu, :);
+rank_c1 = rank_products * rank_products_mu';
+rank_c2 = rank_products_mu * rank_products_mu';
+rank_zeta_real = rank_c1 * pinv(rank_c2);
+rank_zeta_reference = zeros(12, rank_options.rank);
+for imu = 1:rank_options.rank
+    rank_fft = fftn(reshape(rank_zeta_real(:, imu), [3, 4, 1])) / 12;
+    rank_zeta_reference(:, imu) = rank_fft(:);
+end
+assert(abs(rank_space.solve_info.rcond - rcond(rank_c2)) < 1e-15, ...
+    'Single-component QRCP solve_info must describe the Gram denominator.');
+assert(rank_space.solve_info.used_pinv);
+assert(max(abs(rank_space.zeta_g(:) - rank_zeta_reference(:))) < 1e-10, ...
+    'Single-component QRCP must use the locked Gram pseudoinverse path.');
+
+deficient_left = rank_left;
+deficient_left(:, 2) = deficient_left(:, 1);
+deficient_options = rmfield(rank_options, 'ill_conditioned_solver');
+deficient_options.rcond_tol = 1e-12;
+warning_state = warning('query', 'MATLAB:rankDeficientMatrix');
+warning_cleanup = onCleanup(@() warning( ...
+    warning_state.state, 'MATLAB:rankDeficientMatrix'));
+warning('on', 'MATLAB:rankDeficientMatrix');
+lastwarn('');
+isdf.build_space(deficient_left, rank_right, (1:12).', ...
+    [3, 4, 1], deficient_options);
+[~, warning_id] = lastwarn;
+assert(~strcmp(warning_id, 'MATLAB:rankDeficientMatrix'), ...
+    'Single-component Gram solve leaked a rank-deficient warning.');
+
+% Structural memory gates: component K-means weights stay O(ngrid), and
+% explicit QRCP products are returned to build_space instead of rebuilt.
+sample_source = fileread(fullfile(repo_root, ...
+    'src', 'GW', 'ISDF', '+isdf', 'private', 'sample_points.m'));
+build_source = fileread(fullfile(repo_root, ...
+    'src', 'GW', 'ISDF', '+isdf', 'build_space.m'));
+assert(contains(sample_source, 'function weight = local_component_weight'));
+weight_start = strfind(sample_source, ...
+    'function weight = local_component_weight');
+weight_body = sample_source(weight_start(1):end);
+assert(~contains(weight_body, 'component_products('), ...
+    'Component K-means weight helper must not form the full product matrix.');
+assert(contains(build_source, ...
+    '[ind_mu, products] = sample_points(left, right, options);'), ...
+    'build_space must reuse explicit products returned by sample_points.');
+explicit_builds = regexp(sample_source, ...
+    'component_products\(left, right, \[\], \[\]\)', 'match');
+assert(numel(explicit_builds) == 1, ...
+    'The explicit component product matrix must be formed only once.');

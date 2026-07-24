@@ -1,4 +1,4 @@
-function ind_mu = sample_points(left, right, options)
+function [ind_mu, products] = sample_points(left, right, options)
 %SAMPLE_POINTS Select ISDF interpolation points for component products.
 
 if ~iscell(left)
@@ -8,6 +8,7 @@ if ~iscell(right)
     right = {right};
 end
 rng(options.seed, 'twister');
+products = [];
 
 switch lower(options.sample_method)
     case 'qrcp'
@@ -28,14 +29,15 @@ switch lower(options.sample_method)
                 projection = projection + 1i * ...
                     randn(npairs, projection_rank);
             end
-            products = component_products(left, right, [], projection);
-            ind_mu = local_qrcp(products, options.rank);
+            compressed_products = component_products( ...
+                left, right, [], projection);
+            ind_mu = local_qrcp(compressed_products, options.rank);
         end
     case 'kmeans'
         if numel(left) == 1
             weight = local_scalar_weight(left{1}, right{1}, options);
         else
-            [~, weight] = component_products(left, right, [], []);
+            weight = local_component_weight(left, right);
         end
         ind_mu = local_kmeans(weight, options);
     otherwise
@@ -43,6 +45,35 @@ switch lower(options.sample_method)
             ['Unknown ISDF sample_method "%s". Supported methods: qrcp, ' ...
              'qrcp_randomized, kmeans, default.'], options.sample_method);
 end
+end
+
+function weight = local_component_weight(left, right)
+% Compute sum(abs(P).^2, 2) without allocating the product matrix P.
+ngrid = size(left{1}, 1);
+nleft = size(left{1}, 2);
+nright = size(right{1}, 2);
+weight = zeros(ngrid, 1);
+for icomponent = 1:numel(left)
+    left_i = left{icomponent};
+    right_i = right{icomponent};
+    if size(left_i, 1) ~= ngrid || size(right_i, 1) ~= ngrid || ...
+            size(left_i, 2) ~= nleft || size(right_i, 2) ~= nright
+        error('ISDF:ComponentSizeMismatch', ...
+            'All components must share grid and band dimensions.');
+    end
+    for jcomponent = 1:numel(left)
+        left_j = left{jcomponent};
+        right_j = right{jcomponent};
+        if size(left_j, 1) ~= ngrid || size(right_j, 1) ~= ngrid || ...
+                size(left_j, 2) ~= nleft || size(right_j, 2) ~= nright
+            error('ISDF:ComponentSizeMismatch', ...
+                'All components must share grid and band dimensions.');
+        end
+        weight = weight + sum(conj(left_i) .* left_j, 2) .* ...
+            sum(right_i .* conj(right_j), 2);
+    end
+end
+weight = max(real(weight), 0);
 end
 
 function ind_mu = local_scalar_randomized(left, right, options)

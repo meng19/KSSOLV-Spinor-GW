@@ -23,11 +23,14 @@ if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
     options.fftgrid = fftgrid;
 end
 
-ind_mu = sample_points(left, right, options);
-product_mu = component_products(left, right, ind_mu, []);
+[ind_mu, products] = sample_points(left, right, options);
+if isempty(products)
+    product_mu = component_products(left, right, ind_mu, []);
+else
+    product_mu = products(ind_mu, :);
+end
 
-if strcmpi(options.sample_method, 'qrcp')
-    products = component_products(left, right, [], []);
+if strcmpi(options.sample_method, 'qrcp') && numel(left) > 1
     [zeta_real, solve_info] = stable_solve(products, product_mu, options);
     zeta_g = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
 else
