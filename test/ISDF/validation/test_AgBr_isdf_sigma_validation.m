@@ -32,7 +32,7 @@ eps_isdf_input = eps_input;
 eps_isdf_input.isdf.enable = true;
 eps_isdf_input.isdf.algorithm = 'reduced_basis';
 eps_isdf_input.isdf.sample_method = 'qrcp';
-eps_isdf_input.isdf.rank = 8;
+eps_isdf_input.isdf.rank = eps_input.nv * eps_input.nc;
 eps_isdf_input.isdf.seed = 0;
 
 eps_isdf = epsilon(sys, options, syms, eps_isdf_input);
@@ -52,7 +52,7 @@ sig_isdf_input = sig_base;
 sig_isdf_input.isdf.enable = true;
 sig_isdf_input.isdf.algorithm = 'reduced_basis';
 sig_isdf_input.isdf.sample_method = 'qrcp';
-sig_isdf_input.isdf.rank = 8;
+sig_isdf_input.isdf.rank = sig_base.nbnd;
 sig_isdf_input.isdf.seed = 0;
 
 sig_isdf = sigma(eps_isdf, sig_isdf_input, sys, options, syms);
