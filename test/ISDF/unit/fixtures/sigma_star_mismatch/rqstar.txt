@@ -1,0 +1,7 @@
+function [nstar, indst, rqs] = rqstar(~, q)
+%RQSTAR Test fixture that injects an impossible q-star size.
+
+nstar = -1;
+indst = [];
+rqs = q;
+end

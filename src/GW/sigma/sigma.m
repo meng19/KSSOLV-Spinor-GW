@@ -130,6 +130,10 @@ for ispin = 1 : nspin
                 if ~sig.no_symmetries_q_grid
                     [nstar, indst, rqs] = rqstar(syms_rk, qq);
                     if (nstar ~= neq(iq))
+                        if strcmp(ctx.method, 'reduced_basis')
+                            error('ISDF:ReducedSigmaStar', ...
+                                'Q-point star size does not match its weight.');
+                        end
                         error('nstar of kpoint %d mismatch', qq)
                     end
                 end

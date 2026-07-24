@@ -22,6 +22,8 @@ eps_input.use_gpu = 0;
 eps_input.save_mem = 1;
 eps_input.precompute_wav = 0;
 eps_result = epsilon(sys, options, syms, eps_input);
+assert(size(eps_result.inv{1}, 1) == 1, ...
+    'Full-frequency shared-loop fixture must retain nmtx = 1.');
 
 % A frequency-independent screened kernel is sufficient to exercise the
 % full-frequency sigma orchestration without constructing a costly dynamic
@@ -55,8 +57,17 @@ sig_input.exact_static_ch = 0;
 sig_input.use_gpu = 0;
 sig_input.precompute_wav = 0;
 
-sig_result = sigma(eps_result, sig_input, sys, options, syms);
+sig_direct = sigma(eps_result, sig_input, sys, options, syms);
+assert(all(isfinite(sig_direct.sig(:))));
+assert(all(isfinite(sig_direct.eqp0(:))));
 
-assert(all(isfinite(sig_result.sig(:))));
-assert(all(isfinite(sig_result.eqp0(:))));
+sig_matrix_input = sig_input;
+sig_matrix_input.isdf.enable = true;
+sig_matrix_input.isdf.algorithm = 'matrix_elements';
+sig_matrix_input.isdf.sample_method = 'qrcp';
+sig_matrix_input.isdf.rank = sig_input.nbnd;
+sig_matrix_input.isdf.seed = 0;
+sig_matrix = sigma(eps_result, sig_matrix_input, sys, options, syms);
+assert(all(isfinite(sig_matrix.sig(:))));
+assert(all(isfinite(sig_matrix.eqp0(:))));
 fprintf('ISDF shared sigma full-frequency dynamic test passed.\n');

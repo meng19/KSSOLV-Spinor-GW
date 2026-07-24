@@ -68,4 +68,25 @@ end
 assert(strcmp(caught_id, 'ISDF:ReducedSigmaMissingQPoint'), ...
     'Expected per-q missing-screening error, got "%s".', caught_id);
 
+star_fixture = tempname;
+mkdir(star_fixture);
+copyfile(fullfile(script_dir, 'fixtures', 'sigma_star_mismatch', ...
+    'rqstar.txt'), fullfile(star_fixture, 'rqstar.m'));
+original_path = path;
+fixture_cleanup = onCleanup(@() rmdir(star_fixture, 's'));
+path_cleanup = onCleanup(@() path(original_path));
+addpath(star_fixture, '-begin');
+clear rqstar;
+caught_star_id = '';
+try
+    sigma(eps, sig_reduced, sys, options, syms);
+catch ME
+    caught_star_id = ME.identifier;
+end
+assert(strcmp(caught_star_id, 'ISDF:ReducedSigmaStar'), ...
+    'Expected reduced q-star mismatch error, got "%s".', caught_star_id);
+clear path_cleanup;
+clear rqstar;
+clear fixture_cleanup;
+
 fprintf('ISDF sigma context/block test passed.\n');
