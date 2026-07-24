@@ -31,6 +31,8 @@ eps_input.save_mem = 0;
 eps_input.precompute_wav = 0;
 
 eps_direct = epsilon(sys, options, syms, eps_input);
+assert(isequal(size(eps_direct.inv), [sys.nkpts, 1]), ...
+    'Direct epsilon inverse cells must be an nq-by-1 column.');
 
 eps_reduced_input = eps_input;
 eps_reduced_input.isdf.enable = true;
@@ -41,6 +43,8 @@ eps_reduced_input.isdf.rank = eps_input.nv * eps_input.nc;
 eps_reduced_input.isdf.reduced_solver = 'direct';
 eps_reduced_input.isdf.seed = 0;
 eps_reduced = epsilon(sys, options, syms, eps_reduced_input);
+assert(isequal(size(eps_reduced.inv), [sys.nkpts, 1]), ...
+    'Reduced epsilon inverse cells must be an nq-by-1 column.');
 
 eps_error = 0;
 for iq = 1:sys.nkpts

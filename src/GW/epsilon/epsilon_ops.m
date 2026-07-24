@@ -100,6 +100,9 @@ coulg = coulG_select(ctx.eps, ctx.pol.nmtx(iq), ...
     ctx.pol.isrtx(:, iq), ctx.ekin(:, iq), 0, ...
     ctx.pol.mtx{:, iq}, ctx.gvec, ctx.sys, iq);
 if acc.need_full_inverse
+    if iq == 1
+        eps.inv = cell(ctx.nq, 1);
+    end
     epsilon_matrix = eye(ctx.pol.nmtx(iq)) - ...
         coulg(:) .* (ctx.fact * acc.chi0);
     eps.inv{iq} = inv(epsilon_matrix);
@@ -213,6 +216,10 @@ chi0 = chi0 * ctx.fact;
 nmtx = ctx.pol.nmtx(iq);
 coulg = coulG_select(eps, nmtx, ctx.pol.isrtx(:, iq), ...
     ctx.ekin(:, iq), 0, ctx.pol.mtx{:, iq}, ctx.gvec, ctx.sys, iq);
+
+if iq == 1
+    eps.inv = cell(ctx.nq, 1);
+end
 
 if ctx.use_gpu
     if ~isa(coulg, 'gpuArray')
