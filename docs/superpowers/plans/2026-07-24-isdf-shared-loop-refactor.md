@@ -13,6 +13,7 @@
 - Start execution from an isolated worktree based on the branch containing this plan; the worktree must include commit `2bc7108`.
 - The recoverable pre-refactor implementation is tag `isdf-before-shared-loop-refactor` at commit `e186aab`.
 - Keep public signatures `epsilon(sys, options, syms, eps)` and `sigma(eps, sig, sys, options, syms)` unchanged.
+- Preserve non-ISDF callers: missing, empty, non-struct, or disabled `isdf` options resolve to `direct`; when `isdf.enable=false`, ignore every other ISDF field, including an invalid `algorithm`.
 - Keep existing `eps.isdf.*`, `sig.isdf.*`, `eps.inv`, `eps.isdf_screened_w`, `sig.sig`, `sig.cor`, and `sig.eqp0` semantics.
 - Reduced-basis remains static and CPU-only; full-frequency and GPU support are not expanded.
 - `eps.isdf.output='screened_w'` must not construct or store full `eps.inv`.
@@ -96,6 +97,8 @@ This convention removes the legacy ambiguity where scalar callers sometimes pass
 **Files:**
 - Create: `src/GW/common/gw_resolve_method.m`
 - Create: `test/ISDF/unit/test_ISDF_method_resolution.m`
+- Modify: `test/ISDF/validation/test_AgBr_isdf_epsilon_validation.m`
+- Modify: `test/ISDF/validation/test_AgBr_isdf_sigma_validation.m`
 
 **Interfaces:**
 - Consumes: an ISDF settings struct and workflow name `'epsilon'` or `'sigma'`.
@@ -114,7 +117,15 @@ cleanup = onCleanup(@() cd(old_dir));
 cd(repo_root);
 KSSOLV_startup;
 
-assert(strcmp(gw_resolve_method(struct('enable', false), 'epsilon'), 'direct'));
+assert(strcmp(gw_resolve_method([], 'epsilon'), 'direct'));
+assert(strcmp(gw_resolve_method(struct(), 'epsilon'), 'direct'));
+assert(strcmp(gw_resolve_method('legacy-value', 'sigma'), 'direct'));
+assert(strcmp(gw_resolve_method(struct( ...
+    'enable', false, 'algorithm', 'invalid', 'output', 17), ...
+    'epsilon'), 'direct'));
+assert(strcmp(gw_resolve_method(struct( ...
+    'enable', false, 'algorithm', 'invalid', 'reduced_solver', []), ...
+    'sigma'), 'direct'));
 assert(strcmp(gw_resolve_method(struct( ...
     'enable', true, 'algorithm', 'matrix_elements'), 'epsilon'), ...
     'matrix_elements'));
@@ -184,23 +195,78 @@ end
 end
 ```
 
-- [ ] **Step 4: Run the test and existing defaults guard**
+- [ ] **Step 4: Add non-ISDF end-to-end characterization checks**
+
+In `test/ISDF/validation/test_AgBr_isdf_epsilon_validation.m`, immediately after `eps_direct = epsilon(...)`, add:
+
+```matlab
+eps_disabled_input = eps_base;
+eps_disabled_input.isdf.enable = false;
+eps_disabled_input.isdf.algorithm = 'invalid-while-disabled';
+eps_disabled_input.isdf.output = 17;
+eps_disabled = epsilon(sys, options, syms, eps_disabled_input);
+
+direct_fields = sort(setdiff(fieldnames(eps_direct), {'isdf'}));
+disabled_fields = sort(setdiff(fieldnames(eps_disabled), {'isdf'}));
+assert(isequal(direct_fields, disabled_fields), ...
+    'Disabling ISDF changed non-ISDF epsilon output fields.');
+disabled_error = 0;
+for iq = 1:numel(eps_direct.inv)
+    numerator = norm(eps_direct.inv{iq}(:) - eps_disabled.inv{iq}(:));
+    denominator = max(1, norm(eps_direct.inv{iq}(:)));
+    disabled_error = max(disabled_error, numerator / denominator);
+end
+assert(disabled_error < 1e-13, ...
+    'Disabled ISDF changed direct epsilon: relative error %.3e', ...
+    disabled_error);
+```
+
+In `test/ISDF/validation/test_AgBr_isdf_sigma_validation.m`, immediately after `sig_direct = sigma(...)`, add:
+
+```matlab
+sig_disabled_input = sig_base;
+sig_disabled_input.isdf.enable = false;
+sig_disabled_input.isdf.algorithm = 'invalid-while-disabled';
+sig_disabled_input.isdf.reduced_solver = 17;
+sig_disabled = sigma(eps_result, sig_disabled_input, ...
+    sys, options, syms);
+
+direct_fields = sort(setdiff(fieldnames(sig_direct), {'isdf'}));
+disabled_fields = sort(setdiff(fieldnames(sig_disabled), {'isdf'}));
+assert(isequal(direct_fields, disabled_fields), ...
+    'Disabling ISDF changed non-ISDF sigma output fields.');
+sig_disabled_error = norm(sig_direct.sig(:) - sig_disabled.sig(:)) / ...
+    max(1, norm(sig_direct.sig(:)));
+cor_disabled_error = norm(sig_direct.cor(:) - sig_disabled.cor(:)) / ...
+    max(1, norm(sig_direct.cor(:)));
+eqp_disabled_error = norm(sig_direct.eqp0(:) - sig_disabled.eqp0(:)) / ...
+    max(1, norm(sig_direct.eqp0(:)));
+assert(max([sig_disabled_error, cor_disabled_error, ...
+    eqp_disabled_error]) < 1e-13, ...
+    'Disabled ISDF changed direct sigma outputs.');
+```
+
+The original `eps_base` and `sig_base` contain no `isdf` field, so these comparisons cover both required public-entry forms: absent configuration and disabled configuration with invalid dormant fields.
+
+- [ ] **Step 5: Run the test, direct compatibility checks, and defaults guard**
 
 Run:
 
 ```powershell
 matlab -wait -batch "run('test/ISDF/unit/test_ISDF_method_resolution.m')"
 matlab -wait -batch "run('test/ISDF/unit/test_ISDF_cauchy_cohsex_guards.m')"
+matlab -wait -batch "run('test/ISDF/validation/test_AgBr_isdf_epsilon_validation.m')"
+matlab -wait -batch "run('test/ISDF/validation/test_AgBr_isdf_sigma_validation.m')"
 ```
 
-Expected: both PASS.
+Expected: all four scripts PASS. The disabled-vs-absent direct relative errors are below `1e-13`; invalid dormant ISDF fields do not raise an error.
 
-- [ ] **Step 5: Commit the method contract**
+- [ ] **Step 6: Commit the method and direct-compatibility contract**
 
 ```powershell
-git add -- src/GW/common/gw_resolve_method.m test/ISDF/unit/test_ISDF_method_resolution.m
+git add -- src/GW/common/gw_resolve_method.m test/ISDF/unit/test_ISDF_method_resolution.m test/ISDF/validation/test_AgBr_isdf_epsilon_validation.m test/ISDF/validation/test_AgBr_isdf_sigma_validation.m
 git diff --cached --check
-git commit -m "Refactor GW ISDF method resolution"
+git commit -m "Preserve direct workflows without ISDF"
 ```
 
 ---
