@@ -42,4 +42,30 @@ assert(isfield(block, 'coulg') && isfield(block, 'coulg_cutoff'));
 assert(isfield(block, 'eps_inv'));
 assert(numel(block.occ_kq) == sig.nbnd);
 
+sig_reduced = sig;
+sig_reduced.isdf.enable = true;
+sig_reduced.isdf.algorithm = 'reduced_basis';
+eps_empty = eps;
+eps_empty.inv = cell(sys.nkpts, 1);
+context_error_id = '';
+try
+    ctx_empty = sigma_context( ...
+        eps_empty, sig_reduced, sys, options, syms, false);
+catch ME
+    context_error_id = ME.identifier;
+end
+assert(isempty(context_error_id), ...
+    'Reduced context rejected a present inverse container with "%s".', ...
+    context_error_id);
+assert(all(cellfun(@isempty, ctx_empty.eps_inv_fbz)));
+
+caught_id = '';
+try
+    sigma(eps_empty, sig_reduced, sys, options, syms);
+catch ME
+    caught_id = ME.identifier;
+end
+assert(strcmp(caught_id, 'ISDF:ReducedSigmaMissingQPoint'), ...
+    'Expected per-q missing-screening error, got "%s".', caught_id);
+
 fprintf('ISDF sigma context/block test passed.\n');

@@ -84,6 +84,9 @@ ctx.fbz = struct();
 ctx.ekin_fbz = zeros(ctx.gvec.ng, ctx.gr.nf);
 ctx.eps_inv_fbz = cell(ctx.gr.nf, 1);
 ctx.screened_fbz = cell(ctx.gr.nf, 1);
+has_full_inverse = isfield(eps, 'inv') && ~isempty(eps.inv);
+has_reduced_w = isfield(eps, 'isdf_screened_w') && ...
+    ~isempty(eps.isdf_screened_w);
 for iq = 1:ctx.gr.nf
     qq = ctx.gr.f(iq, :);
     [ctx.ekin_fbz(:, iq), ctx.fbz.isrtx(:, iq)] = sortrx( ...
@@ -132,8 +135,7 @@ for iq = 1:ctx.gr.nf
 end
 
 if ~metadata_only && strcmp(ctx.method, 'reduced_basis') && ...
-        all(cellfun(@isempty, ctx.eps_inv_fbz)) && ...
-        all(cellfun(@isempty, ctx.screened_fbz))
+        ~has_full_inverse && ~has_reduced_w
     error('ISDF:ReducedSigmaMissingScreening', ...
         'Provide eps.inv or eps.isdf_screened_w for reduced-basis sigma.');
 end
