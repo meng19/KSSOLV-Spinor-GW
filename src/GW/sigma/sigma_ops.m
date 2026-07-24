@@ -14,8 +14,10 @@ switch ctx.method
         ops.contract = @(block, matrix_elements) ...
             local_contract_full(ctx, block, matrix_elements);
     case 'reduced_basis'
-        error('ISDF:ReducedSigmaNotIntegrated', ...
-            'Reduced sigma is integrated in the next migration task.');
+        ops.matrix_elements = @(block) ...
+            local_matrix_elements(ctx, block, true);
+        ops.contract = @(block, matrix_elements) ...
+            local_contract_reduced(ctx, block, matrix_elements);
 end
 end
 
@@ -36,22 +38,34 @@ if use_isdf
         isdf_options.rank = ceil( ...
             sqrt(ctx.nbands) * ctx.sig.isdf.rank_ratio);
     end
-    gme3 = isdf.matrix_elements(left, right, block.idx.q, ...
-        ctx.grid_size, isdf_options);
-    matrix_elements = reshape(gme3, nq, ctx.nbands);
+    if strcmp(ctx.method, 'reduced_basis')
+        space = isdf.build_space(left, right, block.idx.q, ...
+            ctx.grid_size, isdf_options);
+        gme = reshape(space.zeta_g * space.product_mu, ...
+            nq, ctx.nbands);
+    else
+        gme3 = isdf.matrix_elements(left, right, block.idx.q, ...
+            ctx.grid_size, isdf_options);
+        gme = reshape(gme3, nq, ctx.nbands);
+        space = [];
+    end
+    matrix_elements.gme = gme;
+    matrix_elements.space = space;
     return;
 end
 
 if ctx.use_gpu
-    matrix_elements = gpuArray.zeros(nq, ctx.nbands);
+    gme = gpuArray.zeros(nq, ctx.nbands);
 else
-    matrix_elements = zeros(nq, ctx.nbands);
+    gme = zeros(nq, ctx.nbands);
 end
 for nn = 1:ctx.nbands
-    matrix_elements(:, nn) = getm_sigma(block.in, nn, ...
+    gme(:, nn) = getm_sigma(block.in, nn, ...
         block.wfnkq, block.wfnk, block.fft, block.idx, block.ispin, ...
         ctx.nspinor, ctx.use_gpu);
 end
+matrix_elements.gme = gme;
+matrix_elements.space = [];
 end
 
 function contribution = local_contract_full(ctx, block, matrix_elements)
@@ -77,7 +91,7 @@ end
 omega = [];
 iw_lda = [];
 for nn = 1:ctx.nbands
-    aqs_nocut = matrix_elements(:, nn);
+    aqs_nocut = matrix_elements.gme(:, nn);
     aqs_cutoff = aqs_nocut(1:block.n_cutoff, 1);
     if block.occ_kq(nn) > 0
         ax_loc = ax_loc - block.occ_kq(nn) * ctx.fact * ...
@@ -125,4 +139,63 @@ else
     contribution.ach_freq = [];
 end
 contribution.achx_nn = achx_loc_nn;
+end
+
+function contribution = local_contract_reduced(ctx, block, matrix_elements)
+if isempty(block.screened_w)
+    if isempty(block.eps_inv)
+        error('ISDF:ReducedSigmaMissingQPoint', ...
+            'No screened interaction is available for full-BZ q-point %d.', ...
+            block.iq_fbz);
+    end
+    contribution = local_contract_full(ctx, block, matrix_elements);
+    return;
+end
+
+if size(block.screened_w.zeta_g, 1) ~= block.n_cutoff
+    error('ISDF:ReducedSigmaScreenedSize', ...
+        'Reduced screened interaction does not match sigma cutoff.');
+end
+
+target_zeta = matrix_elements.space.zeta_g(1:block.n_cutoff, :);
+kernel = isdf.screened_kernel( ...
+    block.screened_w, target_zeta, block.coulg_cutoff);
+asx_loc = 0;
+ax_loc = 0;
+ach_loc = 0;
+for nn = 1:ctx.nbands
+    aqs = matrix_elements.gme(:, nn);
+    if block.occ_kq(nn) > 0
+        ax_loc = ax_loc - block.occ_kq(nn) * ctx.fact * ...
+            sum(abs(aqs).^2 .* block.coulg);
+    end
+
+    coeff = matrix_elements.space.product_mu(:, nn);
+    screened_value = ctx.fact * isdf.screened_contract(kernel, coeff);
+    if block.occ_kq(nn) > 0
+        asx_loc = asx_loc - block.occ_kq(nn) * screened_value;
+    end
+    ach_loc = ach_loc + screened_value;
+end
+
+achx_loc = 0;
+if ctx.sig.exact_static_ch
+    screened_matrix = ctx.fact * isdf.screened_kernel( ...
+        block.screened_w, [], block.coulg_cutoff);
+    kdata = ctx.kdata{block.ik};
+    exact_ch = sigma_cohsex_exact_ch(block.in, block.ispin, ...
+        ctx.fbz, kdata.indrk, block.iq, block.aqsch, ...
+        screened_matrix, ctx.sig, block.igpp, block.valid_indices);
+    achx_loc = sum(exact_ch, 'all');
+end
+
+contribution.asx = asx_loc;
+contribution.ax = ax_loc;
+contribution.ach = ach_loc;
+contribution.achx = achx_loc;
+contribution.omega = [];
+contribution.iw_lda = [];
+contribution.asx_freq = [];
+contribution.ach_freq = [];
+contribution.achx_nn = [];
 end

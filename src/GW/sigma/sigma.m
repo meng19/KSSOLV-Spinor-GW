@@ -21,11 +21,6 @@ if use_gpu
     fprintf('Using GPU: %s\n', gpu_dev.Name);
 end
 
-if strcmp(ctx.method, 'reduced_basis')
-    sig = isdf_sigma_reduced_basis(eps, sig, sys, options, syms);
-    return;
-end
-
 ops = sigma_ops(ctx);
 
 ndiag = ndiag_max - ndiag_min + 1;
@@ -153,7 +148,7 @@ for ispin = 1 : nspin
                     ctx, ik, iq, in, ispin, prepared);
                 matrix_elements = ops.matrix_elements(block);
                 if sig.exact_static_ch && block.iq_fbz == 1
-                    aqsch{in, ispin} = matrix_elements(:, in);
+                    aqsch{in, ispin} = matrix_elements.gme(:, in);
                 end
                 block.aqsch = aqsch;
                 contribution = ops.contract(block, matrix_elements);
