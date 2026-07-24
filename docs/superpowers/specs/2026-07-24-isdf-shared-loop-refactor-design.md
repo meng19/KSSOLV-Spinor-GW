@@ -286,6 +286,9 @@ src/GW/ISDF/+isdf/
   build_space.m
   polarizability.m
   screened_w.m
+  screened_kernel.m
+  screened_contract.m
+  real_component.m
   matrix_elements.m
 
 src/GW/ISDF/+isdf/private/
@@ -304,6 +307,9 @@ src/GW/ISDF/+isdf/private/
 isdf_build_space                 -> isdf.build_space
 isdf_reduced_polarizability      -> isdf.polarizability
 isdf_static_screened_interaction -> isdf.screened_w
+isdf_screened_coulomb_kernel     -> isdf.screened_kernel
+isdf_screened_coulomb_contract   -> isdf.screened_contract
+isdf_wavefunction_real_component -> isdf.real_component
 isdf_epsilon_batch               -> isdf.matrix_elements
 isdf_sigma_batch                 -> isdf.matrix_elements
 ```
