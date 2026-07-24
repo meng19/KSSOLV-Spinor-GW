@@ -32,12 +32,20 @@ achx = zeros([ndiag sys.nkpts nspin]);
 % 添加Full frequency支持
 if sig.freq_dep == 2 && sig.freq_dep_method == 2
     % Frequency grids and integration fields are initialized by sigma_context.
+    omega_storage = zeros(nbands, sig.nkn, nspin, sig.nfreq_grid);
+    iw_lda_storage = zeros(nbands, sig.nkn, nspin);
+    asx_freq = cell(ndiag, sig.nkn, nspin);
+    ach_freq = cell(ndiag, sig.nkn, nspin);
 elseif sig.freq_dep == 0
     % Static COHSEX uses the single zero-frequency grid from sigma_context.
 end
 if precompute_wav
     % Precompute wavefunctions for all k-points and spins
     fprintf('Precomputing wavefunctions...\n');
+    wfnk_all = cell(sig.nkn, 1);
+    wfnkq_all = cell(gr.nf, sig.nkn);
+    igpp = cell(gr.nf, sig.nkn);
+    valid_indices = cell(gr.nf, sig.nkn);
     idx_all.k = cell(sig.nkn, 1);
     idx_all.q = cell(gr.nf, sig.nkn);
     idx_all.kq = cell(gr.nf, sig.nkn); % Dimensions: [iq, ik]
@@ -128,7 +136,7 @@ for ispin = 1 : nspin
             for iq = 1 : nrk
                 qq = gr.f(indrk(iq), :);
                 if ~sig.no_symmetries_q_grid
-                    [nstar, indst, rqs] = rqstar(syms_rk, qq);
+                    [nstar, ~, ~] = rqstar(syms_rk, qq);
                     if (nstar ~= neq(iq))
                         if strcmp(ctx.method, 'reduced_basis')
                             error('ISDF:ReducedSigmaStar', ...
@@ -185,8 +193,6 @@ for ispin = 1 : nspin
                     ach_freq{n_index,ik,ispin} = achtemp;
                     if sig.exact_static_ch
                         achx(n_index,ik,ispin) = achxtemp;
-                        achx_nn{n_index,ik,ispin} = ...
-                            contribution.achx_nn * block.weight;
                     end
                 end
             end

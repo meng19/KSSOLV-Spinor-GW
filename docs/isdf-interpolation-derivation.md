@@ -638,7 +638,7 @@ sig.isdf.enable = true;
 isdf.algorithm = 'matrix_elements';
 ```
 
-表示保留原来的 epsilon 或 sigma 主循环，只用 ISDF 加速每一个波函数矩阵元。这个路径仍然显式遍历能带对。
+表示在 epsilon 或 sigma 的共享主循环中，只用 ISDF 加速每一个波函数矩阵元。这个路径仍然显式遍历能带对。
 
 ```matlab
 isdf.algorithm = 'reduced_basis';
@@ -654,15 +654,28 @@ $$
 
 其分量间交叉项保留在 Gram 矩阵和 reduced 极化系数中。
 
-对外工作流函数统一使用 reduced-basis 命名：
+epsilon 和 sigma 不再调用独立的 reduced-basis 工作流函数。两者分别只有一套共享主循环：
 
 ```matlab
-isdf_epsilon_reduced_basis(...)
-isdf_sigma_reduced_basis(...)
-isdf_reduced_polarizability(...)
+% epsilon.m: q -> spin -> irreducible k
+ops = epsilon_ops(ctx);
+
+% sigma.m: spin -> band -> target k -> irreducible q
+ops = sigma_ops(ctx);
 ```
 
-`isdf_comega_cstar` 只作为最后一个函数内部的数值核，`cauchy` 仅表示 `reduced_solver` 的一种选择，不再出现在 epsilon/sigma 工作流函数名中。
+`ctx.method` 在进入主循环前解析一次，`ops` 随后预选矩阵元构造、收缩、累加和 finalize 算子。循环内部不再解析 `isdf.enable` 或 `isdf.algorithm`，也没有 reduced-basis 提前 `return`。direct、matrix-elements 和 reduced-basis 因此共用循环、对称性映射、进度和结果存储逻辑，只在数值算子处不同。
+
+可复用的 ISDF 数值接口位于 `+isdf` package：
+
+```matlab
+space = isdf.build_space(left_components, right_components, ...
+    idx_q, fftgrid, isdf_options);
+polar = isdf.polarizability(space, ev_occ, ev_unocc, solver_options);
+screened = isdf.screened_w(space, coulg, polar);
+```
+
+矩阵元、实空间分量和低秩屏蔽收缩分别使用 `isdf.matrix_elements`、`isdf.real_component`、`isdf.screened_kernel` 和 `isdf.screened_contract`。`isdf_comega_cstar` 仍只是 `isdf.polarizability` 内部的数值核；`cauchy` 仅表示 `reduced_solver` 的一种选择，不再出现在 epsilon/sigma 工作流函数名中。
 
 第三层只在 `reduced_basis` 中生效：
 
@@ -747,9 +760,9 @@ $$
 在代码的多分量 reduced-basis epsilon 路径中，`coeff` 不再默认展开成完整的 \(G\)-space `eps.inv`。它会和 ISDF 辅助基、Coulomb 核一起保存为低秩 screened \(W\)：
 
 ```matlab
-polar = isdf_reduced_polarizability(space, ev_occ, ev_unocc, options);
+polar = isdf.polarizability(space, ev_occ, ev_unocc, solver_options);
 screened_polar.coeff = conj(coeff) * fact;
-eps.isdf_screened_w{iq, 1} = isdf_static_screened_interaction( ...
+eps.isdf_screened_w{iq, 1} = isdf.screened_w( ...
     screened_space, coulg(:), screened_polar);
 ```
 
@@ -876,7 +889,7 @@ $$
 
 因此不需要显式保存完整的 \(\chi_0(G,G')\)、\(\epsilon(G,G')\) 和 \(\epsilon^{-1}(G,G')\)。
 
-代码中的对应关系在 `isdf_static_screened_interaction.m`：
+代码中的对应关系在 `isdf.screened_w`：
 
 ```matlab
 vmat = vc_space.zeta_g' * (vcoul .* vc_space.zeta_g);
@@ -918,8 +931,8 @@ $$
 在后续自能计算中，如果 `eps.isdf_screened_w` 存在，`sigma` 不再使用完整的 `eps.inv`，而是通过
 
 ```matlab
-screened_kernel = isdf_screened_coulomb_kernel(...);
-aqs_eps_coul = isdf_screened_coulomb_contract(...);
+screened_kernel = isdf.screened_kernel(...);
+aqs_eps_coul = isdf.screened_contract(...);
 ```
 
 完成 reduced screened \(W\) 的投影和收缩。
@@ -980,7 +993,7 @@ $$
 方括号中的小矩阵就是代码中的 `screened_kernel`。它由
 
 ```matlab
-screened_kernel = isdf_screened_coulomb_kernel( ...
+screened_kernel = isdf.screened_kernel( ...
     screened, target_zeta, coulg_cutoff);
 ```
 
@@ -991,7 +1004,7 @@ screened_kernel = isdf_screened_coulomb_kernel( ...
 - `target_zeta` 对应 \(Z_{tn}\)；
 - `coulg_cutoff` 对应 \(V\)。
 
-`isdf_screened_coulomb_kernel.m` 中的三步对应为：
+`isdf.screened_kernel` 中的三步对应为：
 
 ```matlab
 left_projector = target_zeta_g.' * (left_vcoul .* screened.zeta_g);
@@ -1023,10 +1036,10 @@ $$
 
 ```matlab
 coeff = sigma_space.product_mu(:, nn);
-aqs_eps_coul = isdf_screened_coulomb_contract(screened_kernel, coeff);
+aqs_eps_coul = isdf.screened_contract(screened_kernel, coeff);
 ```
 
-而 `isdf_screened_coulomb_contract.m` 做的是
+而 `isdf.screened_contract` 做的是
 
 ```matlab
 value = coeff_left(:).' * kernel * conj(coeff_right(:));
@@ -1150,9 +1163,9 @@ $$
 当前代码为了实现简洁，对给定目标态 \(n\) 构造一个包含 `1:nbands` 的目标乘积空间：
 
 ```matlab
-right_components{ispinor} = isdf_wavefunction_real_component( ...
+right_components{ispinor} = isdf.real_component( ...
     wfnkq, fft.Nfft2, idx.kq, ispin, ispinor, 1:nbands);
-sigma_space = isdf_build_space(left_components, right_components, ...
+sigma_space = isdf.build_space(left_components, right_components, ...
     idx.q, grid_size, isdf_options);
 ```
 
