@@ -177,10 +177,12 @@ for ispin = 1 : nspin
                         achx(n_index,ik,ispin) = 0.5 * achxtemp;
                     end
                 elseif sig.freq_dep == 2
-                    asx(n_index,ik,ispin) = asxtemp(iw_lda);
+                    asx(n_index,ik,ispin) = ...
+                        asxtemp(contribution.iw_lda);
                     asx_freq{n_index,ik,ispin} = asxtemp;
                     ax(n_index,ik,ispin) = axtemp;
-                    ach(n_index,ik,ispin) = achtemp(iw_lda);
+                    ach(n_index,ik,ispin) = ...
+                        achtemp(contribution.iw_lda);
                     ach_freq{n_index,ik,ispin} = achtemp;
                     if sig.exact_static_ch
                         achx(n_index,ik,ispin) = achxtemp;
