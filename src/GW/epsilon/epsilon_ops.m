@@ -135,6 +135,11 @@ acc.deferred = cell(ctx.nspin, ctx.gr.nf);
 end
 
 function contribution = local_evaluate_full(ctx, block, use_isdf)
+if ctx.save_mem && ~use_isdf
+    contribution.stream_direct = true;
+    return;
+end
+
 gme_size = [numel(block.idx.q), numel(block.valence_bands), ...
     numel(block.conduction_bands)];
 if ctx.use_gpu
@@ -190,6 +195,11 @@ end
 end
 
 function acc = local_accumulate_full(ctx, acc, contribution, block)
+if isfield(contribution, 'stream_direct')
+    acc = local_accumulate_direct_stream(ctx, acc, block);
+    return;
+end
+
 for it = 1:numel(block.g_maps)
     gme = contribution.gme(block.g_maps{it}, :, :);
     if ctx.save_mem
@@ -204,6 +214,27 @@ for it = 1:numel(block.g_maps)
 end
 end
 
+function acc = local_accumulate_direct_stream(ctx, acc, block)
+for iv_local = 1:numel(block.valence_bands)
+    iv = block.valence_bands(iv_local);
+    for ic_local = 1:numel(block.conduction_bands)
+        ic = block.conduction_bands(ic_local);
+        vector = getm_epsilon(iv, ic, block.wfnkq, block.wfnk, ...
+            block.fft, block.idx, block.ispin, ctx.nspinor, ctx.use_gpu);
+        for ifreq = 1:ctx.pol.nfreq
+            freq = ctx.pol.freq(ifreq) / ctx.ryd;
+            eden = get_eden(iv, ic, block.wfnkq, block.wfnk, ...
+                block.ispin, ctx.options, freq, ctx.eps);
+            for it = 1:numel(block.g_maps)
+                gme = vector(block.g_maps{it});
+                acc.chi0(:, :, ifreq) = acc.chi0(:, :, ifreq) + ...
+                    conj(gme) * gme.' * eden;
+            end
+        end
+    end
+end
+end
+
 function eps = local_finalize_full(ctx, eps, acc, iq)
 chi0 = acc.chi0;
 if ~ctx.save_mem
@@ -212,7 +243,7 @@ if ~ctx.save_mem
             entries = acc.deferred{ispin, ik_fbz};
             for ientry = 1:numel(entries)
                 entry = entries{ientry};
-                chi0 = local_add_states(chi0, entry{1}, entry{2});
+                chi0 = local_add_deferred_states(chi0, entry{1}, entry{2});
             end
         end
     end
@@ -257,5 +288,19 @@ for iv = 1:size(gme, 2)
                 conj(vector) * vector.' * eden(iv, ic, ifreq);
         end
     end
+end
+end
+
+function chi0 = local_add_deferred_states(chi0, gme, eden)
+gme = reshape(gme, size(gme, 1), []);
+eden = reshape(eden, [], size(eden, 3));
+for ifreq = 1:size(eden, 2)
+    weight = eden(:, ifreq).';
+    if isa(gme, 'gpuArray') && ~isa(weight, 'gpuArray')
+        weight = gpuArray(weight);
+    end
+    weighted_gme = bsxfun(@times, gme, weight);
+    chi0(:, :, ifreq) = chi0(:, :, ifreq) + ...
+        conj(gme) * weighted_gme.';
 end
 end

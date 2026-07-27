@@ -83,21 +83,8 @@ for iq = 1:ctx.nq
     fprintf('\n[Epsilon] K-point %2d/%2d | K-vector = (%8.4f, %8.4f, %8.4f) | nmtx = %2d', ...
         iq, ctx.nq, qq(1), qq(2), qq(3), nmtx_current);
 
-    total_bands_for_k = 0;
-    for ik = 1:qdata.nrq
-        if precompute_wav
-            wfnkq_temp = wfnkq_all{iq, ik};
-        else
-            rk = ctx.gr.f(qdata.indrk(ik), :);
-            wfnkq_temp = genwf(rk + qq, ctx.gr, ctx.gvec, ctx.syms, ...
-                ctx.sys, ctx.options, ctx.wfc_cutoff, nbands, use_gpu);
-        end
-        occ_v_temp = get_occ(ctx.options, wfnkq_temp.ikq, 1);
-        total_bands_for_k = total_bands_for_k + ...
-            sum(occ_v_temp > 0) * nspin;
-    end
-
-    current_bands_for_k = 0;
+    total_blocks_for_k = nspin * qdata.nrq;
+    current_blocks_for_k = 0;
     acc = ops.init(iq);
     for ispin = 1:nspin
         for ik = 1:qdata.nrq
@@ -105,21 +92,22 @@ for iq = 1:ctx.nq
                 ctx, iq, ik, wfnk_all, wfnkq_all, fft_all, idx_all);
             block = epsilon_prepare_block(ctx, iq, ik, ispin, prepared);
             if isempty(block.valence_bands) || isempty(block.conduction_bands)
-                current_bands_for_k = current_bands_for_k + ...
-                    numel(block.valence_bands);
+                current_blocks_for_k = current_blocks_for_k + 1;
+                print_progress(current_blocks_for_k, total_blocks_for_k, ...
+                    'Message', 'Epsilon', ...
+                    'Task', sprintf('epsilon_k%d', iq), ...
+                    'PercentStep', 10);
                 continue;
             end
 
             contribution = ops.evaluate(block);
             acc = ops.accumulate(acc, contribution, block);
 
-            for iv_local = 1:numel(block.valence_bands)
-                current_bands_for_k = current_bands_for_k + 1;
-                print_progress(current_bands_for_k, total_bands_for_k, ...
-                    'Message', 'Epsilon', ...
-                    'Task', sprintf('epsilon_k%d', iq), ...
-                    'PercentStep', 10);
-            end
+            current_blocks_for_k = current_blocks_for_k + 1;
+            print_progress(current_blocks_for_k, total_blocks_for_k, ...
+                'Message', 'Epsilon', ...
+                'Task', sprintf('epsilon_k%d', iq), ...
+                'PercentStep', 10);
         end
     end
     eps = ops.finalize(eps, acc, iq);
