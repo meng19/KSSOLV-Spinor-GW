@@ -18,7 +18,7 @@ eps.nc = eps.nbnd - eps.nv;
 eps.freq_dep = 2;
 eps.freq_dep_method = 2;
 eps.freq_cutoff = 200;
-eps.delta_freq = 15;
+eps.delta_freq = 100;
 eps.nfreq_imag = 2;
 omega = 0;
 eta = 0;
@@ -33,7 +33,7 @@ toc
 
 tic
 sig.nbnd = 29;
-sig.ndiag_min = 29;
+sig.ndiag_min = 28;
 sig.ndiag_max = 29;
 sig.freq_dep = 2;
 sig.freq_dep_method = 2;
