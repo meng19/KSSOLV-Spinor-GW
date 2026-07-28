@@ -22,11 +22,6 @@ if strcmp(ctx.method, 'reduced_basis') && ctx.use_gpu
     error('ISDF:ReducedEpsilonGPU', ...
         'ISDF reduced-basis epsilon currently supports CPU execution only.');
 end
-if strcmp(ctx.method, 'reduced_basis') && eps.freq_dep ~= 0
-    error('ISDF:ReducedEpsilonFrequency', ...
-        'ISDF reduced-basis epsilon requires eps.freq_dep = 0.');
-end
-
 sigrid = Ggrid(sys, 4 * sys.ecut);
 ctx.gvec = Gvector(sigrid, sys);
 ctx.gr = fullbz(options, syms, true);

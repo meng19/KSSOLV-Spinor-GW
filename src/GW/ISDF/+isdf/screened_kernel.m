@@ -41,5 +41,14 @@ else
             (contract_vcoul .* conj(target_zeta_g));
     end
 end
-kernel = left_projector * screened.k_mu * right_projector;
+if ndims(screened.k_mu) == 2
+    kernel = left_projector * screened.k_mu * right_projector;
+else
+    kernel = zeros(size(left_projector, 1), size(right_projector, 2), ...
+        size(screened.k_mu, 3));
+    for ifreq = 1:size(screened.k_mu, 3)
+        kernel(:, :, ifreq) = left_projector * ...
+            screened.k_mu(:, :, ifreq) * right_projector;
+    end
+end
 end

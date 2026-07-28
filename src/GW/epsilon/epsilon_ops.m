@@ -39,7 +39,8 @@ function acc = local_init_reduced( ...
 acc.need_full_inverse = need_full_inverse;
 acc.need_screened_w = need_screened_w;
 if acc.need_full_inverse
-    acc.chi0 = zeros(ctx.pol.nmtx(iq));
+    acc.chi0 = zeros(ctx.pol.nmtx(iq), ctx.pol.nmtx(iq), ...
+        ctx.pol.nfreq);
 else
     acc.chi0 = [];
 end
@@ -71,6 +72,7 @@ space = isdf.build_space(left, right, block.idx.q, ...
 solver.method = ctx.eps.isdf.reduced_solver;
 solver.froErr = ctx.eps.isdf.cauchy_froErr;
 solver.MaxIter = ctx.eps.isdf.cauchy_MaxIter;
+solver.freq = ctx.pol.freq / ctx.ryd;
 polar = isdf.polarizability( ...
     space, block.ev_occ, block.ev_unocc, solver);
 contribution.space = space;
@@ -83,7 +85,10 @@ for it = 1:numel(block.g_maps)
     zeta_chi = conj(zeta_star);
     coeff_chi = conj(contribution.polar.coeff);
     if acc.need_full_inverse
-        acc.chi0 = acc.chi0 + zeta_chi * coeff_chi * zeta_chi';
+        for ifreq = 1:size(coeff_chi, 3)
+            acc.chi0(:, :, ifreq) = acc.chi0(:, :, ifreq) + ...
+                zeta_chi * coeff_chi(:, :, ifreq) * zeta_chi';
+        end
     end
     if acc.need_screened_w
         acc.zeta_blocks{end + 1} = zeta_chi;
@@ -109,16 +114,16 @@ if acc.need_full_inverse
     if iq == 1
         eps.inv = cell(ctx.nq, 1);
     end
-    epsilon_matrix = eye(ctx.pol.nmtx(iq)) - ...
-        coulg(:) .* (ctx.fact * acc.chi0);
-    eps.inv{iq} = inv(epsilon_matrix);
+    eps.inv{iq} = local_invert_epsilon_pages( ...
+        ctx.pol.nmtx(iq), coulg(:), ctx.fact * acc.chi0);
 end
 if acc.need_screened_w && ~isfield(eps, 'isdf_screened_w')
     eps.isdf_screened_w = cell(ctx.nq, 1);
 end
 if acc.need_screened_w && ~isempty(acc.zeta_blocks)
     combined_space.zeta_g = cat(2, acc.zeta_blocks{:});
-    combined_polar.coeff = ctx.fact * blkdiag(acc.coeff_blocks{:});
+    combined_polar.coeff = ctx.fact * local_page_blkdiag( ...
+        acc.coeff_blocks);
     eps.isdf_screened_w{iq} = isdf.screened_w( ...
         combined_space, coulg(:), combined_polar);
 end
@@ -303,4 +308,27 @@ for ifreq = 1:size(eden, 2)
     chi0(:, :, ifreq) = chi0(:, :, ifreq) + ...
         conj(gme) * weighted_gme.';
 end
+end
+
+function inverse_pages = local_invert_epsilon_pages(nmtx, coulg, chi0)
+identity = repmat(eye(nmtx), 1, 1, size(chi0, 3));
+epsilon_pages = identity - bsxfun(@times, coulg(:), chi0);
+inverse_cells = cell(1, size(epsilon_pages, 3));
+for ifreq = 1:size(epsilon_pages, 3)
+    inverse_cells{ifreq} = inv(epsilon_pages(:, :, ifreq));
+end
+inverse_pages = cat(3, inverse_cells{:});
+end
+
+function combined = local_page_blkdiag(blocks)
+nfreq = size(blocks{1}, 3);
+page_cells = cell(1, nfreq);
+for ifreq = 1:nfreq
+    page_blocks = cell(1, numel(blocks));
+    for iblock = 1:numel(blocks)
+        page_blocks{iblock} = blocks{iblock}(:, :, ifreq);
+    end
+    page_cells{ifreq} = blkdiag(page_blocks{:});
+end
+combined = cat(3, page_cells{:});
 end

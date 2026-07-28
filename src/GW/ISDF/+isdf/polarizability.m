@@ -1,5 +1,5 @@
 function polar = polarizability(space, ev_occ, ev_unocc, options)
-%ISDF.POLARIZABILITY Build reduced static polarizability coefficients.
+%ISDF.POLARIZABILITY Build reduced polarizability coefficients.
 
 if nargin < 4 || isempty(options)
     options = struct();
@@ -32,15 +32,24 @@ end
 if ~isfield(options, 'method') || isempty(options.method)
     options.method = 'cauchy';
 end
+if ~isfield(options, 'freq') || isempty(options.freq)
+    options.freq = 0;
+end
 ev_occ = ev_occ(:);
 ev_unocc = ev_unocc(:);
+freq = options.freq(:).';
 
 switch lower(options.method)
     case 'direct'
-        result = local_direct(left, right, ev_occ, ev_unocc);
+        result = local_direct(left, right, ev_occ, ev_unocc, freq);
         info = struct('method', 'direct', 'iterations', 0, ...
             'relative_error', 0);
     case 'cauchy'
+        if numel(freq) ~= 1 || freq ~= 0
+            error('ISDF:CauchyFullFrequencyUnsupported', ...
+                ['Cauchy reduced polarizability currently supports ' ...
+                 'static frequency only. Use reduced_solver = direct.']);
+        end
         if ~isfield(options, 'froErr')
             options.froErr = 1e-8;
         end
@@ -57,7 +66,7 @@ switch lower(options.method)
 end
 end
 
-function result = local_direct(left, right, ev_occ, ev_unocc)
+function result = local_direct(left, right, ev_occ, ev_unocc, freq)
 nmu = size(left{1}, 1);
 nv = numel(ev_occ);
 nc = numel(ev_unocc);
@@ -66,7 +75,7 @@ if ncomponents ~= numel(right)
     error('ISDF:ComponentMismatch', ...
         'Left and right component counts must match.');
 end
-result = zeros(nmu, nmu);
+result = zeros(nmu, nmu, numel(freq));
 for iv = 1:nv
     for ic = 1:nc
         coefficient = zeros(nmu, 1);
@@ -74,8 +83,16 @@ for iv = 1:nv
             coefficient = coefficient + ...
                 conj(left{icomponent}(:, iv)) .* right{icomponent}(:, ic);
         end
-        result = result + (coefficient * coefficient') / ...
-            (ev_occ(iv) - ev_unocc(ic));
+        energy_diff = ev_occ(iv) - ev_unocc(ic);
+        for ifreq = 1:numel(freq)
+            if freq(ifreq) == 0
+                eden = 1 / energy_diff;
+            else
+                eden = energy_diff / (energy_diff^2 - freq(ifreq)^2);
+            end
+            result(:, :, ifreq) = result(:, :, ifreq) + ...
+                coefficient * coefficient' * eden;
+        end
     end
 end
 end

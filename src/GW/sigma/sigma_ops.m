@@ -163,6 +163,13 @@ kernel = isdf.screened_kernel( ...
 asx_loc = 0;
 ax_loc = 0;
 ach_loc = 0;
+if ctx.sig.freq_dep == 2
+    achx_loc_nn = zeros(block.in, ctx.nbands);
+else
+    achx_loc_nn = [];
+end
+omega = [];
+iw_lda = [];
 for nn = 1:ctx.nbands
     aqs = matrix_elements.gme(:, nn);
     if block.occ_kq(nn) > 0
@@ -171,11 +178,21 @@ for nn = 1:ctx.nbands
     end
 
     coeff = matrix_elements.space.product_mu(:, nn);
-    screened_value = ctx.fact * isdf.screened_contract(kernel, coeff);
-    if block.occ_kq(nn) > 0
-        asx_loc = asx_loc - block.occ_kq(nn) * screened_value;
+    if ctx.sig.freq_dep == 0
+        kernel_static = kernel(:, :, 1);
+        screened_value = ctx.fact * isdf.screened_contract( ...
+            kernel_static, coeff);
+        if block.occ_kq(nn) > 0
+            asx_loc = asx_loc - block.occ_kq(nn) * screened_value;
+        end
+        ach_loc = ach_loc + screened_value;
+    elseif ctx.sig.freq_dep == 2
+        [asx_loc, ach_loc, achx_loc_nn(block.in, nn), ...
+            omega, iw_lda] = sigma_fullfreq(asx_loc, ach_loc, ...
+            block.in, nn, block.wfnk.ikq, block.wfnkq.ikq, ...
+            block.occ_kq(nn), ctx.options.ev, block.ispin, ...
+            coeff, coeff, ctx.fact * kernel, ctx.sig);
     end
-    ach_loc = ach_loc + screened_value;
 end
 
 achx_loc = 0;
@@ -186,16 +203,27 @@ if ctx.sig.exact_static_ch
     exact_ch = sigma_cohsex_exact_ch(block.in, block.ispin, ...
         ctx.fbz, kdata.indrk, block.iq, block.aqsch, ...
         screened_matrix, ctx.sig, block.igpp, block.valid_indices);
-    achx_loc = sum(exact_ch, 'all');
+    if ctx.sig.freq_dep == 0
+        achx_loc = sum(exact_ch, 'all');
+    elseif ctx.sig.freq_dep == 2
+        achx_loc_nn(block.in, 1) = achx_loc_nn(block.in, 1) + ...
+            0.5 * 0.5 * sum(exact_ch, 'all');
+        achx_loc = sum(achx_loc_nn(block.in, :), 'all');
+    end
 end
 
 contribution.asx = asx_loc;
 contribution.ax = ax_loc;
 contribution.ach = ach_loc;
 contribution.achx = achx_loc;
-contribution.omega = [];
-contribution.iw_lda = [];
-contribution.asx_freq = [];
-contribution.ach_freq = [];
-contribution.achx_nn = [];
+contribution.omega = omega;
+contribution.iw_lda = iw_lda;
+if ctx.sig.freq_dep == 2
+    contribution.asx_freq = asx_loc;
+    contribution.ach_freq = ach_loc;
+else
+    contribution.asx_freq = [];
+    contribution.ach_freq = [];
+end
+contribution.achx_nn = achx_loc_nn;
 end

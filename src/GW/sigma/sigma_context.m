@@ -24,12 +24,6 @@ if ~strcmp(ctx.method, 'direct') && ctx.use_gpu
     error('ISDF:SigmaGPUUnsupported', ...
         'ISDF sigma path currently supports CPU execution only. Set sig.use_gpu = 0.');
 end
-if strcmp(ctx.method, 'reduced_basis') && ...
-        (eps.freq_dep ~= 0 || sig.freq_dep ~= 0)
-    error('ISDF:ReducedSigmaFrequency', ...
-        'ISDF reduced-basis sigma requires static epsilon and sigma.');
-end
-
 ctx.sig.qpt = options.kpts;
 ctx.sig.nkn = sys.nkpts;
 if sig.freq_dep == 2 && sig.freq_dep_method == 2

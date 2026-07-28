@@ -1,5 +1,5 @@
 function screened = screened_w(space, epsilon_vcoul, polar)
-%ISDF.SCREENED_W Construct a reduced static screened operator.
+%ISDF.SCREENED_W Construct a reduced screened operator.
 
 epsilon_vcoul = epsilon_vcoul(:);
 if size(space.zeta_g, 1) ~= numel(epsilon_vcoul)
@@ -15,8 +15,16 @@ warning('off', 'MATLAB:singularMatrix');
 cleanup_warning = onCleanup(@() local_restore_warning( ...
     warning_state_near, warning_state_sing)); %#ok<NASGU>
 
-smw_denominator = inv(polar.coeff) - vmat;
-k_mu = (eye(size(polar.coeff)) - polar.coeff * vmat) \ polar.coeff;
+nmu = size(polar.coeff, 1);
+nfreq = size(polar.coeff, 3);
+smw_denominator = zeros(nmu, nmu, nfreq);
+k_mu = zeros(nmu, nmu, nfreq);
+identity = eye(nmu);
+for ifreq = 1:nfreq
+    coeff = polar.coeff(:, :, ifreq);
+    smw_denominator(:, :, ifreq) = inv(coeff) - vmat;
+    k_mu(:, :, ifreq) = (identity - coeff * vmat) \ coeff;
+end
 screened = struct();
 screened.zeta_g = space.zeta_g;
 screened.epsilon_vcoul = epsilon_vcoul;
