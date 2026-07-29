@@ -67,7 +67,7 @@ assert(eps_error < 1e-8, ...
     eps_error);
 
 sig_input.nbnd = eps_input.nbnd;
-sig_input.ndiag_min = eps_input.nbnd;
+sig_input.ndiag_min = eps_input.nbnd-3;
 sig_input.ndiag_max = eps_input.nbnd;
 sig_input.freq_dep = 2;
 sig_input.freq_dep_method = 2;
@@ -111,6 +111,8 @@ assert(eqp0_error < 1e-8, ...
 assert(eqp1_error < 1e-8, ...
     'Full-frequency reduced eqp1 validation failed: %.3e', ...
     eqp1_error);
+
+% ---- Relative error helper ----
 
 function error_value = local_relative_error(reference, candidate)
 numerator = norm(reference(:) - candidate(:));

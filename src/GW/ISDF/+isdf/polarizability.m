@@ -21,6 +21,8 @@ end
 polar = struct('coeff', coeff, 'info', info);
 end
 
+% ---- Solver dispatch ----
+
 function [result, info] = local_comega_cstar( ...
     left, right, ev_occ, ev_unocc, options)
 if ~iscell(left)
@@ -66,6 +68,8 @@ switch lower(options.method)
 end
 end
 
+% ---- Direct frequency-page polarizability ----
+
 function result = local_direct(left, right, ev_occ, ev_unocc, freq)
 nmu = size(left{1}, 1);
 nv = numel(ev_occ);
@@ -96,6 +100,8 @@ for iv = 1:nv
     end
 end
 end
+
+% ---- Static Cauchy polarizability ----
 
 function [result, relative_error, iteration] = local_cauchy( ...
     left, right, ev_occ, ev_unocc, options)

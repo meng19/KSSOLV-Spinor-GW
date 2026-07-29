@@ -47,6 +47,8 @@ switch lower(options.sample_method)
 end
 end
 
+% ---- Product weights and randomized compression ----
+
 function weight = local_component_weight(left, right)
 % Compute sum(abs(P).^2, 2) without allocating the product matrix P.
 ngrid = size(left{1}, 1);
@@ -99,6 +101,8 @@ products = local_pair_products(compressed_left, compressed_right);
 ind_mu = local_qrcp(products, rank_mu);
 end
 
+% ---- QRCP sampling ----
+
 function products = local_pair_products(left, right)
 [ngrid, nleft] = size(left);
 nright = size(right, 2);
@@ -115,6 +119,8 @@ function ind_mu = local_qrcp(products, rank_mu)
 [~, ~, pivots] = qr(products', 0);
 ind_mu = reshape(pivots(1:rank_mu), 1, []);
 end
+
+% ---- K-means weights and center selection ----
 
 function weight = local_scalar_weight(left, right, options)
 rho_left = sum(abs(left).^2, 2);
@@ -234,6 +240,8 @@ end
 points = (0:ngrid-1).' / max(1, ngrid - 1);
 end
 
+% ---- K-means initialization and repair helpers ----
+
 function ind_mu = local_kmeanspp_init(points, weight, rank_mu, options)
 ngrid = size(points, 1);
 ind_mu = zeros(rank_mu, 1);
@@ -281,6 +289,8 @@ if numel(ind_mu) < rank_mu
     end
 end
 end
+
+% ---- Weighted random sampling ----
 
 function ind = local_weighted_sample(weight, nselect, replace)
 weight = real(weight(:));

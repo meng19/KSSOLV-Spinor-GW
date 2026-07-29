@@ -60,6 +60,8 @@ for iq = 1:ctx.nq
 end
 end
 
+% ---- Irreducible k data for one epsilon q-point ----
+
 function qdata = local_qdata(ctx, iq)
 qq = ctx.pol.qpt(iq, :);
 syms_q = subgrp(qq, ctx.syms);

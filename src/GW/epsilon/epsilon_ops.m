@@ -34,6 +34,8 @@ switch ctx.method
 end
 end
 
+% ---- Reduced-basis epsilon handlers ----
+
 function acc = local_init_reduced( ...
     ctx, iq, need_full_inverse, need_screened_w)
 acc.need_full_inverse = need_full_inverse;
@@ -80,20 +82,17 @@ contribution.polar = polar;
 end
 
 function acc = local_accumulate_reduced(~, acc, contribution, block)
-for it = 1:numel(block.g_maps)
-    zeta_star = contribution.space.zeta_g(block.g_maps{it}, :);
-    zeta_chi = conj(zeta_star);
-    coeff_chi = conj(contribution.polar.coeff);
-    if acc.need_full_inverse
-        for ifreq = 1:size(coeff_chi, 3)
-            acc.chi0(:, :, ifreq) = acc.chi0(:, :, ifreq) + ...
-                zeta_chi * coeff_chi(:, :, ifreq) * zeta_chi';
-        end
-    end
-    if acc.need_screened_w
-        acc.zeta_blocks{end + 1} = zeta_chi;
-        acc.coeff_blocks{end + 1} = coeff_chi;
-    end
+coeff_chi = conj(contribution.polar.coeff);
+if acc.need_full_inverse
+    acc.chi0 = local_accumulate_mapped_chi( ...
+        acc.chi0, contribution.space.zeta_g, coeff_chi, block.g_maps);
+end
+if acc.need_screened_w
+    zeta_chi = local_mapped_zeta_chi(contribution.space.zeta_g, ...
+        block.g_maps);
+    acc.zeta_blocks{end + 1} = zeta_chi;
+    acc.coeff_blocks{end + 1} = local_repeat_page_blkdiag( ...
+        coeff_chi, numel(block.g_maps));
 end
 acc.rank{block.ispin, block.ik} = contribution.space.rank;
 acc.info{block.ispin, block.ik} = contribution.polar.info;
@@ -128,6 +127,8 @@ if acc.need_screened_w && ~isempty(acc.zeta_blocks)
         combined_space, coulg(:), combined_polar);
 end
 end
+
+% ---- Full matrix-element epsilon handlers ----
 
 function acc = local_init_full(ctx, iq)
 nmtx = ctx.pol.nmtx(iq);
@@ -205,17 +206,18 @@ if isfield(contribution, 'stream_direct')
     return;
 end
 
-for it = 1:numel(block.g_maps)
-    gme = contribution.gme(block.g_maps{it}, :, :);
-    if ctx.save_mem
-        acc.chi0 = local_add_states(acc.chi0, gme, contribution.eden);
-    elseif isempty(acc.deferred{block.ispin, block.ik_fbz})
-        acc.deferred{block.ispin, block.ik_fbz} = ...
-            {{gme, contribution.eden}};
-    else
-        acc.deferred{block.ispin, block.ik_fbz}{end + 1} = ...
-            {gme, contribution.eden};
-    end
+if ctx.save_mem
+    acc.chi0 = local_add_mapped_states( ...
+        acc.chi0, contribution.gme, contribution.eden, block.g_maps);
+    return;
+end
+
+gme = local_mapped_gme(contribution.gme, block.g_maps);
+eden = local_repeat_eden(contribution.eden, numel(block.g_maps));
+if isempty(acc.deferred{block.ispin, block.ik_fbz})
+    acc.deferred{block.ispin, block.ik_fbz} = {{gme, eden}};
+else
+    acc.deferred{block.ispin, block.ik_fbz}{end + 1} = {gme, eden};
 end
 end
 
@@ -230,11 +232,8 @@ for iv_local = 1:numel(block.valence_bands)
             freq = ctx.pol.freq(ifreq) / ctx.ryd;
             eden = get_eden(iv, ic, block.wfnkq, block.wfnk, ...
                 block.ispin, ctx.options, freq, ctx.eps);
-            for it = 1:numel(block.g_maps)
-                gme = vector(block.g_maps{it});
-                acc.chi0(:, :, ifreq) = acc.chi0(:, :, ifreq) + ...
-                    conj(gme) * gme.' * eden;
-            end
+            acc.chi0(:, :, ifreq) = local_add_mapped_outer( ...
+                acc.chi0(:, :, ifreq), vector, eden, block.g_maps);
         end
     end
 end
@@ -284,18 +283,44 @@ else
 end
 end
 
-function chi0 = local_add_states(chi0, gme, eden)
-for iv = 1:size(gme, 2)
-    for ic = 1:size(gme, 3)
-        vector = gme(:, iv, ic);
-        for ifreq = 1:size(eden, 3)
-            chi0(:, :, ifreq) = chi0(:, :, ifreq) + ...
-                conj(vector) * vector.' * eden(iv, ic, ifreq);
-        end
+% ---- Full matrix-element accumulation helpers ----
+
+% Accumulate one full matrix-element block in save_mem mode.  The
+% irreducible-k star is represented by G-index maps, so each mapped
+% contribution is a permutation of the same base chi0 page.
+function chi0 = local_add_mapped_states(chi0, gme, eden, g_maps)
+gme = reshape(gme, size(gme, 1), []);
+eden = reshape(eden, [], size(eden, 3));
+for ifreq = 1:size(eden, 2)
+    weight = eden(:, ifreq).';
+    if isa(gme, 'gpuArray') && ~isa(weight, 'gpuArray')
+        weight = gpuArray(weight);
+    end
+    weighted_gme = bsxfun(@times, gme, weight);
+    base_chi = conj(gme) * weighted_gme.';
+    for it = 1:numel(g_maps)
+        gmap = g_maps{it};
+        chi0(:, :, ifreq) = chi0(:, :, ifreq) + ...
+            base_chi(gmap, gmap);
     end
 end
 end
 
+% Streaming direct path: form one outer product for a band pair/frequency,
+% then add all equivalent G-reordered pages without recomputing the outer
+% product for each star member.
+function chi0_page = local_add_mapped_outer( ...
+    chi0_page, vector, eden, g_maps)
+base_outer = conj(vector) * vector.' * eden;
+for it = 1:numel(g_maps)
+    gmap = g_maps{it};
+    chi0_page = chi0_page + base_outer(gmap, gmap);
+end
+end
+
+% Deferred full path: consume a block whose mapped star members have already
+% been concatenated into the band-pair dimension, allowing one BLAS-style
+% matrix product per frequency page in finalize.
 function chi0 = local_add_deferred_states(chi0, gme, eden)
 gme = reshape(gme, size(gme, 1), []);
 eden = reshape(eden, [], size(eden, 3));
@@ -310,6 +335,32 @@ for ifreq = 1:size(eden, 2)
 end
 end
 
+% Expand a full gme block over all equivalent G-space reorderings.  The
+% mapped blocks are concatenated along the band-pair dimension so deferred
+% accumulation can process them as one larger batch.
+function mapped = local_mapped_gme(gme, g_maps)
+mapped_cells = cell(1, numel(g_maps));
+for it = 1:numel(g_maps)
+    mapped_cells{it} = gme(g_maps{it}, :, :);
+end
+mapped = cat(2, mapped_cells{:});
+end
+
+% Match local_mapped_gme column order: cat(2, gme maps) becomes repeated
+% valence-band slices after reshape, so eden is repeated along its first
+% dimension before deferred accumulation flattens it.
+function repeated = local_repeat_eden(eden, repeat_count)
+if repeat_count == 1
+    repeated = eden;
+    return;
+end
+repeated = repmat(eden, repeat_count, 1, 1);
+end
+
+% ---- Frequency-page and reduced-basis assembly helpers ----
+
+% Invert each dynamic epsilon page independently.  Static calculations are
+% represented as a single page and use the same path.
 function inverse_pages = local_invert_epsilon_pages(nmtx, coulg, chi0)
 identity = repmat(eye(nmtx), 1, 1, size(chi0, 3));
 epsilon_pages = identity - bsxfun(@times, coulg(:), chi0);
@@ -320,6 +371,9 @@ end
 inverse_pages = cat(3, inverse_cells{:});
 end
 
+% Page-wise block diagonal assembly for reduced-basis coefficient blocks.
+% Each frequency page gets its own blkdiag because dynamic polarizability
+% stores coeff(:,:,ifreq).
 function combined = local_page_blkdiag(blocks)
 nfreq = size(blocks{1}, 3);
 page_cells = cell(1, nfreq);
@@ -331,4 +385,39 @@ for ifreq = 1:nfreq
     page_cells{ifreq} = blkdiag(page_blocks{:});
 end
 combined = cat(3, page_cells{:});
+end
+
+% Reduced-basis chi0 accumulation.  Build the base reduced chi0 once per
+% frequency, then add equivalent star members by G-index permutation.
+function chi0 = local_accumulate_mapped_chi(chi0, zeta_g, coeff_chi, g_maps)
+base_zeta = conj(zeta_g);
+for ifreq = 1:size(coeff_chi, 3)
+    base_chi = base_zeta * coeff_chi(:, :, ifreq) * base_zeta';
+    for it = 1:numel(g_maps)
+        gmap = g_maps{it};
+        chi0(:, :, ifreq) = chi0(:, :, ifreq) + base_chi(gmap, gmap);
+    end
+end
+end
+
+% Build the combined zeta projector needed for reduced screened-W output.
+% Unlike chi0 accumulation, screened-W must keep the mapped projectors
+% explicitly because sigma later contracts in the reduced basis.
+function zeta_chi = local_mapped_zeta_chi(zeta_g, g_maps)
+zeta_cells = cell(1, numel(g_maps));
+for it = 1:numel(g_maps)
+    zeta_cells{it} = conj(zeta_g(g_maps{it}, :));
+end
+zeta_chi = cat(2, zeta_cells{:});
+end
+
+% Repeat one reduced coefficient page block for all equivalent star members,
+% preserving the page dimension for full-frequency screened-W kernels.
+function repeated = local_repeat_page_blkdiag(coeff, repeat_count)
+if repeat_count == 1
+    repeated = coeff;
+    return;
+end
+blocks = repmat({coeff}, 1, repeat_count);
+repeated = local_page_blkdiag(blocks);
 end

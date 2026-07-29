@@ -21,6 +21,8 @@ switch ctx.method
 end
 end
 
+% ---- Matrix element construction ----
+
 function matrix_elements = local_matrix_elements(ctx, block, use_isdf)
 nq = numel(block.idx.q);
 if use_isdf
@@ -67,6 +69,8 @@ end
 matrix_elements.gme = gme;
 matrix_elements.space = [];
 end
+
+% ---- Full-space sigma contractions ----
 
 function contribution = local_contract_full(ctx, block, matrix_elements)
 eps_inv_I = block.eps_inv - eye(block.n_cutoff);
@@ -140,6 +144,8 @@ else
 end
 contribution.achx_nn = achx_loc_nn;
 end
+
+% ---- Reduced-basis sigma contractions ----
 
 function contribution = local_contract_reduced(ctx, block, matrix_elements)
 if isempty(block.screened_w)

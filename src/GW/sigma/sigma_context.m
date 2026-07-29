@@ -140,6 +140,8 @@ for ik = 1:ctx.nk
 end
 end
 
+% ---- Irreducible q data for one sigma k-point ----
+
 function kdata = local_kdata(ctx, ik)
 kdata.rk = ctx.sig.qpt(ik, :);
 kdata.syms = subgrp(kdata.rk, ctx.syms);
@@ -150,6 +152,8 @@ if ctx.sig.no_symmetries_q_grid
     kdata.neq = ones(1, kdata.nrk);
 end
 end
+
+% ---- Full-BZ screened interaction mapping ----
 
 function mapped = map_screened_w(screened, indt)
 % Permute an irreducible-q screened operator into a full-BZ G ordering.

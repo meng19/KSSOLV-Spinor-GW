@@ -93,6 +93,8 @@ clear fixture_cleanup;
 
 fprintf('ISDF epsilon context/block test passed.\n');
 
+% ---- Error-capture helpers ----
+
 function identifier = local_epsilon_error_id(sys, options, syms, eps)
 identifier = '';
 try
@@ -111,11 +113,15 @@ catch ME
 end
 end
 
+% ---- Reduced accumulator construction ----
+
 function acc = local_reduced_accumulator(ctx, output)
 ctx.eps.isdf.output = output;
 ops = epsilon_ops(ctx);
 acc = ops.init(1);
 end
+
+% ---- Temporary path cleanup ----
 
 function local_cleanup_fixture(original_path, star_fixture)
 path(original_path);

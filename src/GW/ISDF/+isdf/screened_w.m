@@ -34,6 +34,8 @@ screened.smw_denominator = smw_denominator;
 screened.k_mu = k_mu;
 end
 
+% ---- Warning-state cleanup ----
+
 function local_restore_warning(warning_state_near, warning_state_sing)
 warning(warning_state_near.state, 'MATLAB:nearlySingularMatrix');
 warning(warning_state_sing.state, 'MATLAB:singularMatrix');

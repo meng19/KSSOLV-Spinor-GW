@@ -67,6 +67,8 @@ if numel(left) > 1 && ~strcmpi(options.sample_method, 'qrcp')
 end
 end
 
+% ---- ISDF option defaults ----
+
 function options = local_set_defaults(options, nleft, nright, ngrid)
 max_rank = min([ngrid, nleft * nright]);
 if ~isfield(options, 'rank') || isempty(options.rank)

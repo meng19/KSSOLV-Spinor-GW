@@ -86,6 +86,8 @@ fprintf(['ISDF shared sigma full-frequency exact-CH test passed. ', ...
     'sig = %.3e, cor = %.3e, eqp0 = %.3e, eqp1 = %.3e\n'], ...
     errors(1), errors(2), errors(3), errors(4));
 
+% ---- Full-frequency output shape assertions ----
+
 function local_assert_dynamic_shapes(sig, sys, input)
 fields = {'sig', 'cor', 'eqp0', 'eqp1', 'neqp1'};
 for ifield = 1:numel(fields)

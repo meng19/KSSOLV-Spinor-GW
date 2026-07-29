@@ -127,6 +127,8 @@ end
 fprintf('\nCalculation of epsilon completed successfully.\n');
 end
 
+% ---- Precomputed block data ----
+
 function prepared = local_epsilon_prepared_data( ...
     ctx, iq, ik, wfnk_all, wfnkq_all, fft_all, idx_all)
 if ~ctx.precompute_wav
