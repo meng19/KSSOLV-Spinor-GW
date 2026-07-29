@@ -22,7 +22,6 @@ vmat = vc_space.zeta_g' * diag(epsilon_vcoul) * vc_space.zeta_g;
 expected_eps_mu = inv(polar.coeff) - vmat;
 expected_k_mu = inv(expected_eps_mu);
 
-assert(norm(screened.smw_denominator - expected_eps_mu, 'fro') < 1e-10);
 assert(norm(screened.k_mu - expected_k_mu, 'fro') < 1e-10);
 assert(norm(screened.coulomb_reduced - vmat, 'fro') < 1e-10);
 assert(norm(screened.polar_coeff - polar.coeff, 'fro') < 1e-10);

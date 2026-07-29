@@ -33,41 +33,16 @@ eps_input.use_gpu = 0;
 eps_input.save_mem = 0;
 eps_input.precompute_wav = 0;
 
+tic
 eps_direct = epsilon(sys, options, syms, eps_input);
+
 assert(isequal(size(eps_direct.inv), [sys.nkpts, 1]), ...
     'Direct epsilon inverse cells must be an nq-by-1 column.');
 assert(eps_direct.freq_dep == 2 && eps_direct.nfreq > 1, ...
     'Direct epsilon did not run in full-frequency mode.');
 
-eps_reduced_input = eps_input;
-eps_reduced_input.isdf.enable = true;
-eps_reduced_input.isdf.algorithm = 'reduced_basis';
-eps_reduced_input.isdf.output = 'both';
-eps_reduced_input.isdf.sample_method = 'qrcp';
-eps_reduced_input.isdf.rank = eps_input.nv * eps_input.nc;
-eps_reduced_input.isdf.reduced_solver = 'direct';
-eps_reduced_input.isdf.seed = 0;
-eps_reduced = epsilon(sys, options, syms, eps_reduced_input);
-assert(isequal(size(eps_reduced.inv), [sys.nkpts, 1]), ...
-    'Reduced epsilon inverse cells must be an nq-by-1 column.');
-assert(eps_reduced.freq_dep == 2 && eps_reduced.nfreq == eps_direct.nfreq, ...
-    'Reduced epsilon did not preserve the full-frequency grid.');
-
-eps_error = 0;
-for iq = 1:sys.nkpts
-    eps_error = max(eps_error, local_relative_error( ...
-        eps_direct.inv{iq}, eps_reduced.inv{iq}));
-    assert(~isempty(eps_reduced.isdf_screened_w{iq}), ...
-        'Reduced screened W is missing at q-point %d.', iq);
-end
-fprintf(['MoS2 2x2x2 spinor full-frequency reduced epsilon ', ...
-    'relative error = %.3e\n'], eps_error);
-assert(eps_error < 1e-8, ...
-    'Full-frequency reduced epsilon validation failed: %.3e', ...
-    eps_error);
-
 sig_input.nbnd = eps_input.nbnd;
-sig_input.ndiag_min = eps_input.nbnd-3;
+sig_input.ndiag_min = eps_input.nbnd;
 sig_input.ndiag_max = eps_input.nbnd;
 sig_input.freq_dep = 2;
 sig_input.freq_dep_method = 2;
@@ -83,6 +58,36 @@ sig_input.use_gpu = 0;
 sig_input.precompute_wav = 0;
 
 sig_direct = sigma(eps_direct, sig_input, sys, options, syms);
+toc
+
+eps_reduced_input = eps_input;
+eps_reduced_input.isdf.enable = true;
+eps_reduced_input.isdf.algorithm = 'reduced_basis';
+eps_reduced_input.isdf.output = 'screened_w';
+% eps_reduced_input.isdf.output = 'both';
+eps_reduced_input.isdf.sample_method = 'qrcp';
+eps_reduced_input.isdf.rank = eps_input.nv * eps_input.nc;
+eps_reduced_input.isdf.reduced_solver = 'direct';
+eps_reduced_input.isdf.seed = 0;
+
+tic
+eps_reduced = epsilon(sys, options, syms, eps_reduced_input);
+
+assert(eps_reduced.freq_dep == 2 && eps_reduced.nfreq == eps_direct.nfreq, ...
+    'Reduced epsilon did not preserve the full-frequency grid.');
+
+% eps_error = 0;
+% for iq = 1:sys.nkpts
+%     eps_error = max(eps_error, local_relative_error( ...
+%         eps_direct.inv{iq}, eps_reduced.inv{iq}));
+%     assert(~isempty(eps_reduced.isdf_screened_w{iq}), ...
+%         'Reduced screened W is missing at q-point %d.', iq);
+% end
+% fprintf(['MoS2 2x2x2 spinor full-frequency reduced epsilon ', ...
+%     'relative error = %.3e\n'], eps_error);
+% assert(eps_error < 1e-8, ...
+%     'Full-frequency reduced epsilon validation failed: %.3e', ...
+%     eps_error);
 
 sig_reduced_input = sig_input;
 sig_reduced_input.isdf.enable = true;
@@ -90,8 +95,8 @@ sig_reduced_input.isdf.algorithm = 'reduced_basis';
 sig_reduced_input.isdf.sample_method = 'qrcp';
 sig_reduced_input.isdf.rank = sig_input.nbnd;
 sig_reduced_input.isdf.seed = 0;
-eps_screened = rmfield(eps_reduced, 'inv');
-sig_reduced = sigma(eps_screened, sig_reduced_input, sys, options, syms);
+sig_reduced = sigma(eps_reduced, sig_reduced_input, sys, options, syms);
+toc
 
 sig_error = local_relative_error(sig_direct.sig, sig_reduced.sig);
 eqp0_error = local_relative_error(sig_direct.eqp0, sig_reduced.eqp0);

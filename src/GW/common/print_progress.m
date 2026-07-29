@@ -62,19 +62,6 @@ for i = 1:2:length(varargin)
     end
 end
 
-% 判断是否是第一次调用新任务
-isNewTask = isempty(state) || ~isfield(state, taskName) || ...
-            isempty(state.(taskName)) || ~isfield(state.(taskName), 'startTime') || ...
-            isempty(state.(taskName).startTime) || resetTimer;
-
-% 初始化状态
-if isNewTask
-    if isempty(state)
-        state = struct();
-    end
-    state.(taskName) = struct('startTime', tic(), 'lastUpdate', 0, 'lastPercent', 0, 'firstCallDone', false);
-end
-
 % 获取当前时间
 currentTime = datetime('now');
 % timeStr = datestr(currentTime, 'yyyy-mm-dd HH:MM:SS');
@@ -95,6 +82,41 @@ if effectiveTotal == 0
 else
     percent = effectiveCurrent / effectiveTotal;
 end
+displayPercent = min(max(percent, 0), 1);
+
+% 判断是否是第一次调用新任务，或同名任务进入了新一轮循环。
+% 典型场景是同一个 MATLAB session 内多次运行 epsilon/sigma，同名 Task
+% 的 persistent 计时器仍留着，导致 Elapsed 继承上次任务耗时。
+isNewTask = isempty(state) || ~isfield(state, taskName) || ...
+            isempty(state.(taskName)) || ~isfield(state.(taskName), 'startTime') || ...
+            isempty(state.(taskName).startTime) || resetTimer;
+if ~isNewTask
+    taskState = state.(taskName);
+    if isfield(taskState, 'total') && taskState.total ~= effectiveTotal
+        isNewTask = true;
+    elseif isfield(taskState, 'lastCurrent') && ...
+            effectiveCurrent < taskState.lastCurrent
+        isNewTask = true;
+    elseif isfield(taskState, 'completed') && taskState.completed && ...
+            effectiveCurrent < effectiveTotal
+        isNewTask = true;
+    end
+end
+
+% 初始化状态
+if isNewTask
+    if isempty(state)
+        state = struct();
+    end
+    state.(taskName) = struct( ...
+        'startTime', tic(), ...
+        'lastUpdate', 0, ...
+        'lastPercent', 0, ...
+        'lastCurrent', 0, ...
+        'total', effectiveTotal, ...
+        'completed', false, ...
+        'firstCallDone', false);
+end
 
 % 获取已用时间
 elapsed = toc(state.(taskName).startTime);
@@ -107,7 +129,8 @@ if isNewTask || ~state.(taskName).firstCallDone
     state.(taskName).firstCallDone = true;
 else
     timeSinceLastUpdate = elapsed - state.(taskName).lastUpdate;
-    percentSinceLastUpdate = (percent - state.(taskName).lastPercent) * 100;
+    percentSinceLastUpdate = ...
+        (displayPercent - state.(taskName).lastPercent) * 100;
     
     % 判断是否需要更新：时间间隔或百分比间隔
     if timeSinceLastUpdate >= minInterval
@@ -127,11 +150,15 @@ if ~shouldUpdate
 end
 
 state.(taskName).lastUpdate = elapsed;
-state.(taskName).lastPercent = percent;
+state.(taskName).lastPercent = displayPercent;
+state.(taskName).lastCurrent = effectiveCurrent;
+state.(taskName).total = effectiveTotal;
+state.(taskName).completed = effectiveCurrent >= effectiveTotal && ...
+    effectiveCurrent > 0;
 
 % 计算预计剩余时间 (ETA)
-if effectiveCurrent > 1 && elapsed > 0.01 && percent > 0
-    totalTime = elapsed / percent;
+if effectiveCurrent > 1 && elapsed > 0.01 && displayPercent > 0
+    totalTime = elapsed / displayPercent;
     remainingTime = totalTime - elapsed;
     etaStr = format_time(max(0, remainingTime));
 else
@@ -140,7 +167,7 @@ end
 elapsedStr = format_time(elapsed);
 
 % 计算进度条
-filledLength = round(barWidth * min(percent, 1));
+filledLength = round(barWidth * displayPercent);
 emptyLength = barWidth - filledLength;
 
 % 构建进度条 - 使用块状字符
@@ -154,7 +181,7 @@ end
 fprintf('\n'); % 回车符，覆盖当前行
 if isempty(msg)
     fprintf('[%s] %s %6.2f%% | Elapsed: %s | ETA: %s', ...
-        timeStr, bar, percent * 100, elapsedStr, etaStr);
+        timeStr, bar, displayPercent * 100, elapsedStr, etaStr);
 else
     % 截断过长的消息以确保对齐
     maxMsgLen = 18;
@@ -162,7 +189,7 @@ else
         msg = msg(1:maxMsgLen);
     end
     fprintf('[%s] %-18s %s %6.2f%% | Elapsed: %s | ETA: %s', ...
-        timeStr, msg, bar, percent * 100, elapsedStr, etaStr);
+        timeStr, msg, bar, displayPercent * 100, elapsedStr, etaStr);
 end
 
 % 强制刷新MATLAB事件队列，确保输出立即显示

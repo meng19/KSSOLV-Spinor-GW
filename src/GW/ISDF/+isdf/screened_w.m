@@ -17,20 +17,18 @@ cleanup_warning = onCleanup(@() local_restore_warning( ...
 
 nmu = size(polar.coeff, 1);
 nfreq = size(polar.coeff, 3);
-smw_denominator = zeros(nmu, nmu, nfreq);
 k_mu = zeros(nmu, nmu, nfreq);
 identity = eye(nmu);
 for ifreq = 1:nfreq
     coeff = polar.coeff(:, :, ifreq);
-    smw_denominator(:, :, ifreq) = inv(coeff) - vmat;
-    k_mu(:, :, ifreq) = (identity - coeff * vmat) \ coeff;
+    system_matrix = identity - coeff * vmat;
+    k_mu(:, :, ifreq) = system_matrix \ coeff;
 end
 screened = struct();
 screened.zeta_g = space.zeta_g;
 screened.epsilon_vcoul = epsilon_vcoul;
 screened.polar_coeff = polar.coeff;
 screened.coulomb_reduced = vmat;
-screened.smw_denominator = smw_denominator;
 screened.k_mu = k_mu;
 end
 
