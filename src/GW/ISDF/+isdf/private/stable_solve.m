@@ -12,10 +12,11 @@ if ~isfield(options, 'warn_ill_conditioned') || isempty(options.warn_ill_conditi
 end
 
 info = struct();
+b_condition = gather_if_gpu(b);
 if size(b, 1) == size(b, 2)
-    info.rcond = rcond(b);
+    info.rcond = rcond(b_condition);
 else
-    singular_values = svd(b, 'econ');
+    singular_values = svd(b_condition, 'econ');
     if isempty(singular_values) || max(singular_values) == 0
         info.rcond = 0;
     else

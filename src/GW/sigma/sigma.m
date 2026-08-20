@@ -177,22 +177,27 @@ for ispin = 1 : nspin
                 
                 n_index = in - ndiag_min + 1;
                 if sig.freq_dep == 0
-                    asx(n_index,ik,ispin) = asxtemp;
-                    ax(n_index,ik,ispin) = axtemp;
-                    ach(n_index,ik,ispin) = 0.5 * achtemp;
+                    asx(n_index,ik,ispin) = sigma_gather_if_gpu(asxtemp);
+                    ax(n_index,ik,ispin) = sigma_gather_if_gpu(axtemp);
+                    ach(n_index,ik,ispin) = ...
+                        0.5 * sigma_gather_if_gpu(achtemp);
                     if sig.exact_static_ch
-                        achx(n_index,ik,ispin) = 0.5 * achxtemp;
+                        achx(n_index,ik,ispin) = ...
+                            0.5 * sigma_gather_if_gpu(achxtemp);
                     end
                 elseif sig.freq_dep == 2
                     asx(n_index,ik,ispin) = ...
-                        asxtemp(contribution.iw_lda);
-                    asx_freq{n_index,ik,ispin} = asxtemp;
-                    ax(n_index,ik,ispin) = axtemp;
+                        sigma_gather_if_gpu(asxtemp(contribution.iw_lda));
+                    asx_freq{n_index,ik,ispin} = ...
+                        sigma_gather_if_gpu(asxtemp);
+                    ax(n_index,ik,ispin) = sigma_gather_if_gpu(axtemp);
                     ach(n_index,ik,ispin) = ...
-                        achtemp(contribution.iw_lda);
-                    ach_freq{n_index,ik,ispin} = achtemp;
+                        sigma_gather_if_gpu(achtemp(contribution.iw_lda));
+                    ach_freq{n_index,ik,ispin} = ...
+                        sigma_gather_if_gpu(achtemp);
                     if sig.exact_static_ch
-                        achx(n_index,ik,ispin) = achxtemp;
+                        achx(n_index,ik,ispin) = ...
+                            sigma_gather_if_gpu(achxtemp);
                     end
                 end
             end

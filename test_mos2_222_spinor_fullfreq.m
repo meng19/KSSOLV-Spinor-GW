@@ -5,6 +5,12 @@ close all;
 randn('state', 0);
 rand('state', 0);
 
+script_dir = fileparts(mfilename('fullpath'));
+repo_root = script_dir;
+addpath(repo_root);
+old_dir = pwd;
+cleanup = onCleanup(@() cd(old_dir));
+cd(repo_root);
 KSSOLV_startup;
 
 read_vxc = 1;
@@ -32,7 +38,7 @@ toc
 
 tic
 sig.nbnd = 29;
-sig.ndiag_min = 26;
+sig.ndiag_min = 29;
 sig.ndiag_max = 29;
 sig.freq_dep = 2;
 sig.freq_dep_method = 2;

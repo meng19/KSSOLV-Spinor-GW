@@ -14,6 +14,27 @@ if nargin < 3 || isempty(contract_vcoul)
 end
 epsilon_vcoul = epsilon_vcoul(:);
 contract_vcoul = contract_vcoul(:);
+use_gpu = isa(screened.zeta_g, 'gpuArray') || ...
+    isa(epsilon_vcoul, 'gpuArray') || ...
+    isa(contract_vcoul, 'gpuArray') || ...
+    (~isempty(target_zeta_g) && isa(target_zeta_g, 'gpuArray'));
+if use_gpu
+    if ~isa(screened.zeta_g, 'gpuArray')
+        screened.zeta_g = gpuArray(screened.zeta_g);
+    end
+    if ~isa(screened.k_mu, 'gpuArray')
+        screened.k_mu = gpuArray(screened.k_mu);
+    end
+    if ~isa(epsilon_vcoul, 'gpuArray')
+        epsilon_vcoul = gpuArray(epsilon_vcoul);
+    end
+    if ~isa(contract_vcoul, 'gpuArray')
+        contract_vcoul = gpuArray(contract_vcoul);
+    end
+    if ~isempty(target_zeta_g) && ~isa(target_zeta_g, 'gpuArray')
+        target_zeta_g = gpuArray(target_zeta_g);
+    end
+end
 build_full_matrix = isempty(target_zeta_g);
 if (~build_full_matrix && ...
         size(target_zeta_g, 1) ~= numel(epsilon_vcoul)) || ...
@@ -44,11 +65,7 @@ end
 if ndims(screened.k_mu) == 2
     kernel = left_projector * screened.k_mu * right_projector;
 else
-    kernel = zeros(size(left_projector, 1), size(right_projector, 2), ...
-        size(screened.k_mu, 3));
-    for ifreq = 1:size(screened.k_mu, 3)
-        kernel(:, :, ifreq) = left_projector * ...
-            screened.k_mu(:, :, ifreq) * right_projector;
-    end
+    kernel = page_project_kernel( ...
+        left_projector, screened.k_mu, right_projector);
 end
 end

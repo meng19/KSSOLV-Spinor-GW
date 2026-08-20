@@ -2,6 +2,19 @@ function screened = screened_w(space, epsilon_vcoul, polar)
 %ISDF.SCREENED_W Construct a reduced screened operator.
 
 epsilon_vcoul = epsilon_vcoul(:);
+if isa(space.zeta_g, 'gpuArray')
+    if ~isa(epsilon_vcoul, 'gpuArray')
+        epsilon_vcoul = gpuArray(epsilon_vcoul);
+    end
+    if ~isa(polar.coeff, 'gpuArray')
+        polar.coeff = gpuArray(polar.coeff);
+    end
+elseif isa(epsilon_vcoul, 'gpuArray')
+    space.zeta_g = gpuArray(space.zeta_g);
+    if ~isa(polar.coeff, 'gpuArray')
+        polar.coeff = gpuArray(polar.coeff);
+    end
+end
 if size(space.zeta_g, 1) ~= numel(epsilon_vcoul)
     error('ISDF:ScreenedInteractionSize', ...
         'Coulomb vector length must match zeta_g row count.');
@@ -16,14 +29,11 @@ cleanup_warning = onCleanup(@() local_restore_warning( ...
     warning_state_near, warning_state_sing)); %#ok<NASGU>
 
 nmu = size(polar.coeff, 1);
-nfreq = size(polar.coeff, 3);
-k_mu = zeros(nmu, nmu, nfreq);
-identity = eye(nmu);
-for ifreq = 1:nfreq
-    coeff = polar.coeff(:, :, ifreq);
-    system_matrix = identity - coeff * vmat;
-    k_mu(:, :, ifreq) = system_matrix \ coeff;
+if size(polar.coeff, 2) ~= nmu
+    error('ISDF:ScreenedInteractionSize', ...
+        'Reduced polarizability coefficients must be square pages.');
 end
+k_mu = page_solve_screened_w(polar.coeff, vmat);
 screened = struct();
 screened.zeta_g = space.zeta_g;
 screened.epsilon_vcoul = epsilon_vcoul;

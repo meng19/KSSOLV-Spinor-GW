@@ -1,7 +1,7 @@
 # ISDF 插值基构造与 `c1 / c2` 推导
 
-本文说明 `src/GW/ISDF/isdf_product_gram.m` 和
-`src/GW/ISDF/isdf_zeta_g_from_product_gram.m` 中
+本文说明 `src/GW/ISDF/+isdf/private/product_gram.m` 和
+`src/GW/ISDF/+isdf/private/zeta_to_g.m` 中
 
 ```matlab
 c1 = (phi * phi_mu') .* (psi * psi_mu');
@@ -615,8 +615,8 @@ $$
 代码中对应：
 
 ```matlab
-isdf_comega_cstar(...)
-isdf_comega_cstar({left_component_1, ...}, {right_component_1, ...}, ...)
+isdf.polarizability(...)
+isdf.polarizability(component_space, ev_occ, ev_unocc, solver_options)
 ```
 
 ## 10. 输入参数怎么选
@@ -675,7 +675,7 @@ polar = isdf.polarizability(space, ev_occ, ev_unocc, solver_options);
 screened = isdf.screened_w(space, coulg, polar);
 ```
 
-矩阵元、实空间分量和低秩屏蔽收缩分别使用 `isdf.matrix_elements`、`isdf.real_component`、`isdf.screened_kernel` 和 `isdf.screened_contract`。`isdf_comega_cstar` 仍只是 `isdf.polarizability` 内部的数值核；`cauchy` 仅表示 `reduced_solver` 的一种选择，不再出现在 epsilon/sigma 工作流函数名中。
+矩阵元、实空间分量和低秩屏蔽收缩分别使用 `isdf.matrix_elements`、`isdf.real_component`、`isdf.screened_kernel` 和 `isdf.screened_contract`。`comega_cstar` 位于 `src/GW/ISDF/+isdf/private`，只是 `isdf.polarizability` 内部的数值核；`cauchy` 仅表示 `reduced_solver` 的一种选择，不再出现在 epsilon/sigma 工作流函数名中。
 
 第三层只在 `reduced_basis` 中生效：
 
@@ -1202,7 +1202,7 @@ zeta_real = c1 / c2;
 - full-rank 验证时尤其容易出现；
 - spinor 或多 k 点体系中也更常见。
 
-当前代码使用 `isdf_stable_right_solve` 包装这个求解。默认仍保持直接右除，以维持和原始验证路径一致，但会静默 MATLAB 的 near-singular warning。若需要诊断，可设置：
+当前代码使用 `src/GW/ISDF/+isdf/private/stable_solve.m` 包装这个求解。默认仍保持直接右除，以维持和原始验证路径一致，但会静默 MATLAB 的 near-singular warning。若需要诊断，可设置：
 
 ```matlab
 eps.isdf.warn_ill_conditioned = true;

@@ -37,9 +37,14 @@ end
 if nargin < 4
     projection = [];
 end
+if isa(left{1}, 'gpuArray') && ~isempty(projection) && ...
+        ~isa(projection, 'gpuArray')
+    projection = gpuArray(projection);
+end
 
 if isempty(projection)
-    products = zeros(numel(grid_indices), nleft * nright);
+    products = complex(zeros(numel(grid_indices), nleft * nright, ...
+        'like', left{1}));
     for iright = 1:nright
         for ileft = 1:nleft
             column = ileft + (iright - 1) * nleft;
@@ -56,7 +61,8 @@ else
             ['Projection row count must match the number of ' ...
              'left-right band pairs.']);
     end
-    products = zeros(numel(grid_indices), size(projection, 2));
+    products = complex(zeros(numel(grid_indices), size(projection, 2), ...
+        'like', left{1}));
     for iprojection = 1:size(projection, 2)
         projection_matrix = reshape(projection(:, iprojection), ...
             nleft, nright);

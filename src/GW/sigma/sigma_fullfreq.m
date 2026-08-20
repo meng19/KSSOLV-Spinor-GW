@@ -40,8 +40,8 @@ nfreq_imag = sig.nfreq_integral_imag;
 ncouls     = size(aqsn, 1);
 
 % 初始化
-sres = zeros(nfreqeval, 1) + 0i;   % residue 贡献
-sint = zeros(nfreqeval, 1) + 0i;   % 虚频率积分贡献
+sres = complex(zeros(nfreqeval, 1, 'like', eps_inv_I_coul));   % residue 贡献
+sint = complex(zeros(nfreqeval, 1, 'like', eps_inv_I_coul));   % 虚频率积分贡献
 
 % ───────────────────────────────────────────────
 % 1. 静态 COH 贡献（如果开启 exact_ch）
@@ -64,7 +64,8 @@ idx_need = find(need_res);
 if ~isempty(idx_need)
     wx_abs_need = abs(wxi(idx_need));
     if nfreq_real <= 1
-        sres_omega_need = sum(aqsmn .* eps_inv_I_coul(:,:,1), 'all') * ones(length(idx_need), 1);
+        sres_omega_need = sum(aqsmn .* eps_inv_I_coul(:,:,1), 'all') * ...
+            ones(length(idx_need), 1, 'like', eps_inv_I_coul);
     else
         ifreq_need = zeros(length(idx_need), 1, 'int32');
         for k = 1:nfreq_real-1
@@ -79,7 +80,8 @@ if ~isempty(idx_need)
         fact2  = (wx_abs_need - f_low) ./ df;
         fact1  = 1 - fact2;
         
-        sres_omega_need = zeros(length(idx_need), 1);
+        sres_omega_need = complex(zeros(length(idx_need), 1, ...
+            'like', eps_inv_I_coul));
         
         for i = 1:length(idx_need)
             k = ifreq_need(i);
@@ -95,6 +97,9 @@ if ~isempty(idx_need)
     % 填回 sres（只更新需要的点）
     occ_sign_vec = sign(wxi(idx_need));
     occ_sign_vec(occ_sign_vec == 0) = 1;
+    if isa(sres_omega_need, 'gpuArray')
+        occ_sign_vec = gpuArray(occ_sign_vec);
+    end
     sres(idx_need) = occ_sign_vec .* sres_omega_need;
 end
 % ───────────────────────────────────────────────
@@ -109,7 +114,7 @@ imag_freqs = imag(sig.freq_integral(nfreq_real+1 : nfreq_real+nfreq_imag));
 
 if ~isfield(sig, 'cd_int_method') || sig.cd_int_method == 0
     % method 0：简单中点梯形 + atan 积分
-    sint = zeros(nfreqeval, 1) + 0i;
+    sint = complex(zeros(nfreqeval, 1, 'like', eps_inv_I_coul));
     
     % 第一段
     sW = sW_imag(1);

@@ -3,7 +3,7 @@ function values = real_component( ...
 %ISDF.REAL_COMPONENT Convert one spinor component to real space.
 
 ngrid = numel(fft_template);
-values = zeros(ngrid, numel(band_list));
+values = complex(zeros(ngrid, numel(band_list), 'like', fft_template));
 for iband = 1:numel(band_list)
     fft_box = fft_template;
     fft_box(idx) = wfn.psi{ispin, ispinor}(:, band_list(iband));

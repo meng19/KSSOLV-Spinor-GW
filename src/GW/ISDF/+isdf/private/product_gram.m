@@ -30,8 +30,8 @@ end
 
 ind_mu = ind_mu(:);
 nmu = numel(ind_mu);
-c1 = zeros(ngrid, nmu);
-c2 = zeros(nmu, nmu);
+c1 = complex(zeros(ngrid, nmu, 'like', left_components{1}));
+c2 = complex(zeros(nmu, nmu, 'like', left_components{1}));
 for icomponent = 1:numel(left_components)
     left_i = left_components{icomponent};
     right_i = right_components{icomponent};

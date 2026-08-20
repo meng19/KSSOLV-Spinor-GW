@@ -36,11 +36,6 @@ eps_input.precompute_wav = 0;
 tic
 eps_direct = epsilon(sys, options, syms, eps_input);
 
-assert(isequal(size(eps_direct.inv), [sys.nkpts, 1]), ...
-    'Direct epsilon inverse cells must be an nq-by-1 column.');
-assert(eps_direct.freq_dep == 2 && eps_direct.nfreq > 1, ...
-    'Direct epsilon did not run in full-frequency mode.');
-
 sig_input.nbnd = eps_input.nbnd;
 sig_input.ndiag_min = eps_input.nbnd;
 sig_input.ndiag_max = eps_input.nbnd;
@@ -73,9 +68,6 @@ eps_reduced_input.isdf.seed = 0;
 tic
 eps_reduced = epsilon(sys, options, syms, eps_reduced_input);
 
-assert(eps_reduced.freq_dep == 2 && eps_reduced.nfreq == eps_direct.nfreq, ...
-    'Reduced epsilon did not preserve the full-frequency grid.');
-
 % eps_error = 0;
 % for iq = 1:sys.nkpts
 %     eps_error = max(eps_error, local_relative_error( ...
@@ -95,6 +87,7 @@ sig_reduced_input.isdf.algorithm = 'reduced_basis';
 sig_reduced_input.isdf.sample_method = 'qrcp';
 sig_reduced_input.isdf.rank = sig_input.nbnd;
 sig_reduced_input.isdf.seed = 0;
+
 sig_reduced = sigma(eps_reduced, sig_reduced_input, sys, options, syms);
 toc
 

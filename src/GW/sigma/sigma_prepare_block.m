@@ -60,6 +60,12 @@ block.coulg = coulg;
 block.coulg_cutoff = coulg(1:block.n_cutoff);
 block.eps_inv = ctx.eps_inv_fbz{iq_fbz};
 block.screened_w = ctx.screened_fbz{iq_fbz};
+if ctx.use_gpu
+    if ~isempty(block.eps_inv) && ~isa(block.eps_inv, 'gpuArray')
+        block.eps_inv = gpuArray(block.eps_inv);
+    end
+    block.screened_w = sigma_gpu_screened_w(block.screened_w);
+end
 block.igpp = igpp;
 block.valid_indices = valid_indices;
 end

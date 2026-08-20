@@ -88,7 +88,7 @@ for iq = 1:ctx.nq
     acc = ops.init(iq);
     for ispin = 1:nspin
         for ik = 1:qdata.nrq
-            prepared = local_epsilon_prepared_data( ...
+            prepared = epsilon_prepared_data( ...
                 ctx, iq, ik, wfnk_all, wfnkq_all, fft_all, idx_all);
             block = epsilon_prepare_block(ctx, iq, ik, ispin, prepared);
             if isempty(block.valence_bands) || isempty(block.conduction_bands)
@@ -125,21 +125,4 @@ if use_gpu
 end
 
 fprintf('\nCalculation of epsilon completed successfully.\n');
-end
-
-% ---- Precomputed block data ----
-
-function prepared = local_epsilon_prepared_data( ...
-    ctx, iq, ik, wfnk_all, wfnkq_all, fft_all, idx_all)
-if ~ctx.precompute_wav
-    prepared = [];
-    return;
-end
-
-prepared.wfnk = wfnk_all{iq, ik};
-prepared.wfnkq = wfnkq_all{iq, ik};
-prepared.fft = fft_all{iq};
-prepared.idx.k = idx_all.k{iq, ik};
-prepared.idx.q = idx_all.q{iq};
-prepared.idx.kq = idx_all.kq{iq, ik};
 end

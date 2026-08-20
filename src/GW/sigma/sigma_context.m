@@ -20,10 +20,6 @@ ctx.nk = sys.nkpts;
 ctx.wfc_cutoff = 2 * sys.ecut;
 ctx.use_gpu = sig.use_gpu && exist('gpuDevice', 'file');
 
-if ~strcmp(ctx.method, 'direct') && ctx.use_gpu
-    error('ISDF:SigmaGPUUnsupported', ...
-        'ISDF sigma path currently supports CPU execution only. Set sig.use_gpu = 0.');
-end
 ctx.sig.qpt = options.kpts;
 ctx.sig.nkn = sys.nkpts;
 if sig.freq_dep == 2 && sig.freq_dep_method == 2
@@ -122,7 +118,7 @@ for iq = 1:ctx.gr.nf
         if isfield(eps, 'isdf_screened_w') && ...
                 numel(eps.isdf_screened_w) >= irq && ...
                 ~isempty(eps.isdf_screened_w{irq})
-            ctx.screened_fbz{iq} = map_screened_w( ...
+            ctx.screened_fbz{iq} = sigma_map_screened_w( ...
                 eps.isdf_screened_w{irq}, indt);
         end
     end
@@ -136,34 +132,6 @@ end
 
 ctx.kdata = cell(ctx.nk, 1);
 for ik = 1:ctx.nk
-    ctx.kdata{ik} = local_kdata(ctx, ik);
+    ctx.kdata{ik} = sigma_kdata(ctx, ik);
 end
-end
-
-% ---- Irreducible q data for one sigma k-point ----
-
-function kdata = local_kdata(ctx, ik)
-kdata.rk = ctx.sig.qpt(ik, :);
-kdata.syms = subgrp(kdata.rk, ctx.syms);
-[kdata.nrk, kdata.neq, kdata.indrk] = irrbz(kdata.syms, ctx.gr);
-if ctx.sig.no_symmetries_q_grid
-    kdata.nrk = ctx.gr.nf;
-    kdata.indrk = 1:kdata.nrk;
-    kdata.neq = ones(1, kdata.nrk);
-end
-end
-
-% ---- Full-BZ screened interaction mapping ----
-
-function mapped = map_screened_w(screened, indt)
-% Permute an irreducible-q screened operator into a full-BZ G ordering.
-
-if size(screened.zeta_g, 1) < max(indt) || ...
-        numel(screened.epsilon_vcoul) < max(indt)
-    error('ISDF:ReducedSigmaMapSize', ...
-        'Screened interaction is too small for the requested G mapping.');
-end
-mapped = screened;
-mapped.zeta_g = screened.zeta_g(indt, :);
-mapped.epsilon_vcoul = screened.epsilon_vcoul(indt);
 end
