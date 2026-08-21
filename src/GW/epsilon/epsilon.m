@@ -112,6 +112,7 @@ for iq = 1:ctx.nq
     end
     eps = ops.finalize(eps, acc, iq);
 end
+eps = epsilon_warn_cauchy_fallback(ctx, eps);
 
 % 存储结果
 eps.mtx = ctx.pol.mtx;
