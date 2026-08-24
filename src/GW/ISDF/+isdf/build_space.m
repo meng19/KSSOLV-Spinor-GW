@@ -18,6 +18,8 @@ end
 ngrid = size(left{1}, 1);
 nleft = size(left{1}, 2);
 nright = size(right{1}, 2);
+options.weight_was_set = isfield(options, 'weight') && ...
+    ~isempty(options.weight);
 options = set_defaults(options, nleft, nright, ngrid);
 if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
     options.fftgrid = fftgrid;

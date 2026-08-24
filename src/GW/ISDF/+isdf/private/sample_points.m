@@ -38,7 +38,7 @@ switch lower(options.sample_method)
         if numel(left) == 1
             weight = scalar_weight(left{1}, right{1}, options);
         else
-            weight = component_weight(left, right);
+            weight = component_weight(left, right, options);
         end
         ind_mu = kmeans_sample(weight, options);
     otherwise

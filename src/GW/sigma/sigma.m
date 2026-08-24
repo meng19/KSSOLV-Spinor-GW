@@ -11,8 +11,7 @@ nspin = ctx.nspin;
 use_gpu = ctx.use_gpu;
 gvec = ctx.gvec;
 gr = ctx.gr;
-fbz = ctx.fbz;
-precompute_wav = sig.precompute_wav;
+precompute_wav = ctx.precompute_wav;
 
 % 添加GPU支持标志
 if use_gpu
@@ -39,71 +38,31 @@ if sig.freq_dep == 2 && sig.freq_dep_method == 2
 elseif sig.freq_dep == 0
     % Static COHSEX uses the single zero-frequency grid from sigma_context.
 end
-if precompute_wav
-    % Precompute wavefunctions for all k-points and spins
-    fprintf('Precomputing wavefunctions...\n');
-    wfnk_all = cell(sig.nkn, 1);
-    wfnkq_all = cell(gr.nf, sig.nkn);
-    igpp = cell(gr.nf, sig.nkn);
-    valid_indices = cell(gr.nf, sig.nkn);
-    idx_all.k = cell(sig.nkn, 1);
-    idx_all.q = cell(gr.nf, sig.nkn);
-    idx_all.kq = cell(gr.nf, sig.nkn); % Dimensions: [iq, ik]
-    
-    % 计算预计算总数
-    precompute_total = 0;
-    for ik = 1:sig.nkn
-        kdata = ctx.kdata{ik};
-        precompute_total = precompute_total + kdata.nrk;
-    end
-    
-    precompute_count = 0;
-    for ik = 1:sig.nkn
-        kdata = ctx.kdata{ik};
-        rk = kdata.rk;
-        nrk = kdata.nrk;
-        indrk = kdata.indrk;
-        for iq = 1:nrk
-            qq = gr.f(indrk(iq), :);
-            precompute_count = precompute_count + 1;
-            print_progress(precompute_count, precompute_total, 'Message', 'Precompute WFN', 'Task', 'sigma_precompute');
-            
-            wfnk_all{ik} = genwf(rk, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
-            
-            rkq = rk - qq;
-            wfnkq_all{iq, ik} = genwf(rkq, gr, gvec, syms, sys, options, wfc_cutoff, nbands, use_gpu);
-            
-            % 由于FFT格点仅与k, q有关，预计算信息
-            idx_all = sigma_prefft(wfnkq_all{iq, ik}, wfnk_all{ik}, fbz.mtx{:, indrk(iq)}, iq, ik, sys, idx_all, use_gpu);
-            
-            % 如果计算exact_static_ch，由于格点相减仅与k, q有关，预计算信息
-            [igpp{iq, ik}, valid_indices{iq, ik}]= pre_exact_static_ch(fbz, gvec, indrk, iq, use_gpu);
-        end
-    end
-    fprintf('\nPrecomputation completed.\n');
-else
-    fprintf('No precomputation of wav to save memory.\n');
-end
+%%
+% Precompute wavefunctions for all k-points and spins
+[wfnk_all, wfnkq_all, idx_all, igpp, valid_indices] = ...
+    sigma_precompute_wavefunctions(ctx);
+%%
 
 fprintf('Starting sigma calculation loop over spins and bands...\n');
+sigma_q_work = sum(cellfun(@(kdata) kdata.nrk, ctx.kdata));
+total_sigma_work = nspin * ndiag * sigma_q_work;
+current_sigma_work = 0;
+sigma_task = 'sigma_main';
+print_progress(0, total_sigma_work, ...
+    'Message', 'Sigma', ...
+    'Task', sigma_task, ...
+    'Reset', true, ...
+    'StartOnly', true);
 
 for ispin = 1 : nspin
     fprintf('Processing spin %d of %d...\n', ispin, nspin);
     
     for in = ndiag_min : ndiag_max
         fprintf('\n Band %d (index %d/%d)', in, in - ndiag_min + 1, ndiag);
-        total_iterations = sig.nkn;
-        current_iteration = 0;
         for ik = 1 : sig.nkn
-            current_iteration = current_iteration + 1;
             kdata = ctx.kdata{ik};
             rk = kdata.rk;
-            
-            % 使用print_progress函数更新进度条（每10%刷新）
-            print_progress(current_iteration, total_iterations, ...
-                'Message', sprintf('Sigma sp:%d ik:%d', ispin, ik), ...
-                'Task', sprintf('sigma_spin%d_iband%d', ispin, in), ...
-                'PercentStep', 10);
             
             % 在循环开始前初始化GPU变量
             if use_gpu
@@ -146,16 +105,9 @@ for ispin = 1 : nspin
                     end
                 end
 
-                prepared = struct();
-                prepared.wfnk = wfnk;
-                if precompute_wav
-                    prepared.wfnkq = wfnkq_all{iq, ik};
-                    prepared.idx.k = idx_all.k{ik};
-                    prepared.idx.q = idx_all.q{iq, ik};
-                    prepared.idx.kq = idx_all.kq{iq, ik};
-                    prepared.igpp = igpp{iq, ik};
-                    prepared.valid_indices = valid_indices{iq, ik};
-                end
+                prepared = sigma_prepared_data( ...
+                    ctx, ik, iq, wfnk, wfnkq_all, idx_all, ...
+                    igpp, valid_indices);
                 block = sigma_prepare_block( ...
                     ctx, ik, iq, in, ispin, prepared);
                 matrix_elements = ops.matrix_elements(block);
@@ -200,6 +152,12 @@ for ispin = 1 : nspin
                             sigma_gather_if_gpu(achxtemp);
                     end
                 end
+                current_sigma_work = current_sigma_work + 1;
+                print_progress(current_sigma_work, total_sigma_work, ...
+                    'Message', sprintf('Sig b:%d ik:%d q:%d', ...
+                    in, ik, iq), ...
+                    'Task', sigma_task, ...
+                    'PercentStep', 1);
             end
         end
     end

@@ -116,6 +116,30 @@ assert(kmeans_error < 1e-10, ...
     'K-means component ISDF differs from direct FFT: %.3e', kmeans_error);
 assert(~isfield(kmeans_space, 'products'));
 
+explicit_add_options = kmeans_options;
+explicit_add_options.weight = 'add';
+explicit_add_space = isdf.build_space(left, right, ...
+    idx_q, fftgrid, explicit_add_options);
+assert(numel(explicit_add_space.ind_mu) == explicit_add_options.rank);
+
+explicit_power_options = kmeans_options;
+explicit_power_options.weight = 'power';
+explicit_power_options.power = 1.5;
+explicit_power_space = isdf.build_space(left, right, ...
+    idx_q, fftgrid, explicit_power_options);
+assert(numel(explicit_power_space.ind_mu) == explicit_power_options.rank);
+
+bad_weight_options = kmeans_options;
+bad_weight_options.weight = 'bad';
+try
+    isdf.build_space(left, right, idx_q, fftgrid, bad_weight_options);
+    error('ISDFTest:MissingUnknownWeightError', ...
+        'Component K-means accepted an invalid weight option.');
+catch err
+    assert(strcmp(err.identifier, 'ISDF:UnknownWeight'), ...
+        'Unexpected invalid component weight error: %s', err.identifier);
+end
+
 fprintf(['Component package ISDF tests passed. qrcp = %.3e, ' ...
     'single = %.3e, randomized = %.3e, kmeans = %.3e, cauchy = %.3e\n'], ...
     max_error, single_error, randomized_error, kmeans_error, relative_error);
@@ -177,6 +201,8 @@ weight_source = fileread(fullfile(repo_root, ...
 build_source = fileread(fullfile(repo_root, ...
     'src', 'GW', 'ISDF', '+isdf', 'build_space.m'));
 assert(contains(weight_source, 'function weight = component_weight'));
+assert(contains(weight_source, 'switch lower(options.weight)'), ...
+    'Component K-means weight helper must honor options.weight.');
 assert(~contains(weight_source, 'component_products('), ...
     'Component K-means weight helper must not form the full product matrix.');
 assert(contains(build_source, ...

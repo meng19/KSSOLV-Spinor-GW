@@ -4,7 +4,6 @@ ctx = epsilon_context(sys, options, syms, eps);
 nbands = ctx.nbands;
 nspin = ctx.nspin;
 nspinor = ctx.nspinor;
-precompute_wav = ctx.precompute_wav;
 use_gpu = ctx.use_gpu;
 
 nvbands = eps.nv;
@@ -31,49 +30,23 @@ else
     fprintf('Initializing static calculation (frequency = 0)\n');
 end
 
-wfnk_all = [];
-wfnkq_all = [];
-fft_all = [];
-idx_all = [];
-
 %% Precompute wavefunctions for all k-points and spins
-if precompute_wav
-    fprintf('Precomputing wavefunctions...\n');
-    wfnk_all = cell(ctx.nq, max(cellfun(@(qdata) qdata.nrq, ctx.qdata)));
-    wfnkq_all = cell(size(wfnk_all));
-    idx_all.k = cell(ctx.nq, ctx.gr.nf);
-    idx_all.q = cell(ctx.nq, 1);
-    idx_all.kq = cell(ctx.nq, ctx.gr.nf);
-    fft_all = cell(ctx.nq, 1);
-
-    precompute_total = sum(cellfun(@(qdata) qdata.nrq, ctx.qdata));
-    precompute_count = 0;
-    for iq = 1:ctx.nq
-        qdata = ctx.qdata{iq};
-        qq = ctx.pol.qpt(iq, :);
-        for ik = 1:qdata.nrq
-            precompute_count = precompute_count + 1;
-            print_progress(precompute_count, precompute_total, ...
-                'Message', 'Precompute WFN', 'Task', 'epsilon_precompute');
-
-            rk = ctx.gr.f(qdata.indrk(ik), :);
-            wfnk_all{iq, ik} = genwf(rk, ctx.gr, ctx.gvec, ctx.syms, ...
-                ctx.sys, ctx.options, ctx.wfc_cutoff, nbands, use_gpu);
-            wfnkq_all{iq, ik} = genwf(rk + qq, ctx.gr, ctx.gvec, ...
-                ctx.syms, ctx.sys, ctx.options, ctx.wfc_cutoff, nbands, use_gpu);
-            [fft_all, idx_all] = epsilon_prefft( ...
-                wfnkq_all{iq, ik}, wfnk_all{iq, ik}, iq, ik, ...
-                ctx.pol, fft_all, idx_all, use_gpu);
-        end
-    end
-    fprintf('\nPrecomputation completed.\n');
-else
-    fprintf('No precomputation of wav to save memory.\n');
-end
+[wfnk_all, wfnkq_all, fft_all, idx_all] = ...
+    epsilon_precompute_wavefunctions(ctx);
 
 %% Main loop
 fprintf('Starting main epsilon calculation loop...\n');
 ops = epsilon_ops(ctx);
+epsilon_block_work = max(1, nvbands * ncbands);
+total_epsilon_work = epsilon_block_work * nspin * sum(cellfun( ...
+    @(qdata) qdata.nrq, ctx.qdata));
+current_epsilon_work = 0;
+epsilon_task = 'epsilon_main';
+print_progress(0, total_epsilon_work, ...
+    'Message', 'Epsilon', ...
+    'Task', epsilon_task, ...
+    'Reset', true, ...
+    'StartOnly', true);
 
 for iq = 1:ctx.nq
     qdata = ctx.qdata{iq};
@@ -83,31 +56,39 @@ for iq = 1:ctx.nq
     fprintf('\n[Epsilon] K-point %2d/%2d | K-vector = (%8.4f, %8.4f, %8.4f) | nmtx = %2d', ...
         iq, ctx.nq, qq(1), qq(2), qq(3), nmtx_current);
 
-    total_blocks_for_k = nspin * qdata.nrq;
-    current_blocks_for_k = 0;
     acc = ops.init(iq);
     for ispin = 1:nspin
         for ik = 1:qdata.nrq
             prepared = epsilon_prepared_data( ...
                 ctx, iq, ik, wfnk_all, wfnkq_all, fft_all, idx_all);
             block = epsilon_prepare_block(ctx, iq, ik, ispin, prepared);
+            block.progress = struct( ...
+                'task', epsilon_task, ...
+                'completed_before', current_epsilon_work, ...
+                'block_work', epsilon_block_work, ...
+                'total_work', total_epsilon_work, ...
+                'percent_step', 1);
             if isempty(block.valence_bands) || isempty(block.conduction_bands)
-                current_blocks_for_k = current_blocks_for_k + 1;
-                print_progress(current_blocks_for_k, total_blocks_for_k, ...
-                    'Message', 'Epsilon', ...
-                    'Task', sprintf('epsilon_k%d', iq), ...
-                    'PercentStep', 10);
+                current_epsilon_work = current_epsilon_work + ...
+                    epsilon_block_work;
+                print_progress(current_epsilon_work, total_epsilon_work, ...
+                    'Message', sprintf('Eps q:%d ik:%d s:%d', ...
+                    iq, ik, ispin), ...
+                    'Task', epsilon_task, ...
+                    'PercentStep', 1);
                 continue;
             end
 
             contribution = ops.evaluate(block);
             acc = ops.accumulate(acc, contribution, block);
 
-            current_blocks_for_k = current_blocks_for_k + 1;
-            print_progress(current_blocks_for_k, total_blocks_for_k, ...
-                'Message', 'Epsilon', ...
-                'Task', sprintf('epsilon_k%d', iq), ...
-                'PercentStep', 10);
+            current_epsilon_work = current_epsilon_work + ...
+                epsilon_block_work;
+            print_progress(current_epsilon_work, total_epsilon_work, ...
+                'Message', sprintf('Eps q:%d ik:%d s:%d', ...
+                iq, ik, ispin), ...
+                'Task', epsilon_task, ...
+                'PercentStep', 1);
         end
     end
     eps = ops.finalize(eps, acc, iq);

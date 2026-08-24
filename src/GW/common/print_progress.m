@@ -6,6 +6,7 @@ function print_progress(current, total, varargin)
 %   print_progress(current, total, 'Total', totalAll, 'Message', msg) 在嵌套循环中使用总进度
 %   print_progress(current, total, 'UpdateInterval', dt) 设置最小刷新间隔（秒，默认0.5s）
 %   print_progress(current, total, 'PercentStep', p)   设置按百分比刷新（默认0，禁用）
+%   print_progress(current, total, 'StartOnly', true)  只启动计时器不打印
 %
 %   输入参数：
 %       current - 当前进度 (从1开始)
@@ -16,6 +17,7 @@ function print_progress(current, total, varargin)
 %       'Reset'         - 可选，true时重置计时器
 %       'UpdateInterval'- 可选，最小刷新间隔（秒），默认0.5秒
 %       'PercentStep'   - 可选，按百分比间隔刷新（如1表示每1%刷新一次），默认0（禁用）
+%       'StartOnly'     - 可选，true时只初始化计时状态，不输出进度条
 %
 %   示例：
 %       % 每0.5秒刷新一次（默认）
@@ -40,6 +42,7 @@ resetTimer = false;
 barWidth = 40; % 进度条宽度
 minInterval = 0.5; % 默认最小刷新间隔（秒）
 percentStep = 0;   % 默认不按百分比刷新
+startOnly = false;
 
 for i = 1:2:length(varargin)
     if length(varargin) < i+1, break; end
@@ -58,6 +61,8 @@ for i = 1:2:length(varargin)
                 minInterval = varargin{i+1};
             case 'percentstep'
                 percentStep = varargin{i+1};
+            case 'startonly'
+                startOnly = varargin{i+1};
         end
     end
 end
@@ -118,6 +123,10 @@ if isNewTask
         'firstCallDone', false);
 end
 
+if startOnly
+    return;
+end
+
 % 获取已用时间
 elapsed = toc(state.(taskName).startTime);
 
@@ -157,7 +166,7 @@ state.(taskName).completed = effectiveCurrent >= effectiveTotal && ...
     effectiveCurrent > 0;
 
 % 计算预计剩余时间 (ETA)
-if effectiveCurrent > 1 && elapsed > 0.01 && displayPercent > 0
+if effectiveCurrent > 0 && elapsed > 0.01 && displayPercent > 0
     totalTime = elapsed / displayPercent;
     remainingTime = totalTime - elapsed;
     etaStr = format_time(max(0, remainingTime));
@@ -184,11 +193,11 @@ if isempty(msg)
         timeStr, bar, displayPercent * 100, elapsedStr, etaStr);
 else
     % 截断过长的消息以确保对齐
-    maxMsgLen = 18;
+    maxMsgLen = 28;
     if length(msg) > maxMsgLen
         msg = msg(1:maxMsgLen);
     end
-    fprintf('[%s] %-18s %s %6.2f%% | Elapsed: %s | ETA: %s', ...
+    fprintf('[%s] %-28s %s %6.2f%% | Elapsed: %s | ETA: %s', ...
         timeStr, msg, bar, displayPercent * 100, elapsedStr, etaStr);
 end
 

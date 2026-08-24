@@ -19,6 +19,7 @@ ctx.nspinor = sys.nspinor;
 ctx.nk = sys.nkpts;
 ctx.wfc_cutoff = 2 * sys.ecut;
 ctx.use_gpu = sig.use_gpu && exist('gpuDevice', 'file');
+ctx.precompute_wav = sig.precompute_wav;
 
 ctx.sig.qpt = options.kpts;
 ctx.sig.nkn = sys.nkpts;
