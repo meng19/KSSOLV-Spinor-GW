@@ -22,6 +22,7 @@ else
 end
 omega = [];
 iw_lda = [];
+progress_work = local_progress_work(block);
 for nn = 1:ctx.nbands
     aqs_nocut = matrix_elements.gme(:, nn);
     aqs_cutoff = aqs_nocut(1:block.n_cutoff, 1);
@@ -40,6 +41,9 @@ for nn = 1:ctx.nbands
             block.occ_kq(nn), ctx.options.ev, block.ispin, ...
             aqs_cutoff, aqs_cutoff, eps_inv_I_coul, ctx.sig);
     end
+    sigma_progress(block, progress_work * (0.5 + 0.5 * nn / ctx.nbands), ...
+        sprintf('S b%d i%d q%d n%d/%d', ...
+        block.in, block.ik, block.iq, nn, ctx.nbands));
 end
 
 achx_loc = 0;
@@ -60,4 +64,12 @@ end
 contribution = sigma_make_contribution( ...
     ctx, asx_loc, ax_loc, ach_loc, achx_loc, ...
     omega, iw_lda, achx_loc_nn);
+end
+
+function work = local_progress_work(block)
+if isfield(block, 'progress') && isfield(block.progress, 'block_work')
+    work = block.progress.block_work;
+else
+    work = 1;
+end
 end

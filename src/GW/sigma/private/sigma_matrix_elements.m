@@ -2,6 +2,7 @@ function matrix_elements = sigma_matrix_elements(ctx, block, use_isdf)
 %SIGMA_MATRIX_ELEMENTS Build direct or ISDF sigma matrix elements.
 
 nq = numel(block.idx.q);
+progress_work = local_progress_work(block);
 if use_isdf
     left = cell(1, ctx.nspinor);
     right = cell(1, ctx.nspinor);
@@ -13,10 +14,6 @@ if use_isdf
             1:ctx.nbands);
     end
     isdf_options = ctx.sig.isdf;
-    if ~isfield(isdf_options, 'rank') || isempty(isdf_options.rank)
-        isdf_options.rank = ceil( ...
-            sqrt(ctx.nbands) * ctx.sig.isdf.rank_ratio);
-    end
     if strcmp(ctx.method, 'reduced_basis')
         space = isdf.build_space(left, right, block.idx.q, ...
             ctx.grid_size, isdf_options);
@@ -28,6 +25,9 @@ if use_isdf
         gme = reshape(gme3, nq, ctx.nbands);
         space = [];
     end
+    sigma_progress(block, progress_work * 0.5, ...
+        sprintf('S b%d i%d q%d me %d/%d', ...
+        block.in, block.ik, block.iq, ctx.nbands, ctx.nbands));
     matrix_elements.gme = gme;
     matrix_elements.space = space;
     return;
@@ -42,7 +42,18 @@ for nn = 1:ctx.nbands
     gme(:, nn) = getm_sigma(block.in, nn, ...
         block.wfnkq, block.wfnk, block.fft, block.idx, block.ispin, ...
         ctx.nspinor, ctx.use_gpu);
+    sigma_progress(block, progress_work * 0.5 * nn / ctx.nbands, ...
+        sprintf('S b%d i%d q%d me %d/%d', ...
+        block.in, block.ik, block.iq, nn, ctx.nbands));
 end
 matrix_elements.gme = gme;
 matrix_elements.space = [];
+end
+
+function work = local_progress_work(block)
+if isfield(block, 'progress') && isfield(block.progress, 'block_work')
+    work = block.progress.block_work;
+else
+    work = 1;
+end
 end

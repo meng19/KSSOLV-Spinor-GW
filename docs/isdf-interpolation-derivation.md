@@ -705,6 +705,14 @@ sig.isdf.reduced_solver = 'cauchy';
 
 插值点采样由 `isdf.sample_method` 控制。`sample_method = 'qrcp'` 是精确 QRCP 参考路径，需要完整乘积态矩阵 \(P\)，因此多分量 spinor 情况会显式构造 `products`。`sample_method = 'qrcp_randomized'`、`'default'` 和 `'kmeans'` 不显式构造完整 \(P\)：随机 QRCP 只形成随机压缩后的乘积矩阵，`kmeans` 只使用乘积态范数权重，随后都通过 Gram 矩阵和插值点上的 `product_mu` 构造 \(Z\)。因此正式计算中建议优先使用非 `qrcp` 采样，`qrcp` 主要用于小体系验证。
 
+ISDF 秩参数由 `src/GW/ISDF/+isdf/private/set_defaults.m` 统一设置。若用户没有显式给出 `isdf.rank`，默认值取
+
+```matlab
+ceil(sqrt(nleft * nright) * isdf.rank_ratio)
+```
+
+并限制在 `1 <= rank <= min(ngrid, nleft*nright)`。这里 `nleft*nright` 是当前乘积空间中的带对数；`rank_ratio` 默认为 1，可用于整体放大或缩小推荐 rank。若用户显式给出的 `isdf.rank` 超过推荐默认值，代码会输出 `ISDF:RankAboveRecommended` warning，提示高 rank 可能导致插值方程病态；若低于推荐默认值，会输出 `ISDF:RankBelowRecommended` warning，提示低 rank 可能欠拟合乘积空间并增大矩阵元误差；若 rank 超出允许范围并被截断，会输出 `ISDF:RankClamped` warning。full-rank 验证或低秩收敛扫描脚本仍可显式设置 `isdf.rank`，必要时可用 `isdf.warn_rank_selection = false` 关闭这类提示。
+
 `eps.isdf.output` 决定 reduced-basis epsilon 返回哪种对象：
 
 ```matlab

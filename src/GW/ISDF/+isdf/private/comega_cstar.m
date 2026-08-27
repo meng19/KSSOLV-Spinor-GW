@@ -19,7 +19,12 @@ freq = options.freq(:).';
 
 switch lower(options.method)
     case 'direct'
-        result = comega_direct(left, right, ev_occ, ev_unocc, freq);
+        progress = [];
+        if isfield(options, 'progress')
+            progress = options.progress;
+        end
+        result = comega_direct(left, right, ev_occ, ev_unocc, ...
+            freq, progress);
         info = struct('method', 'direct', 'iterations', 0, ...
             'relative_error', 0, ...
             'fallback_pages', false(1, numel(freq)), ...

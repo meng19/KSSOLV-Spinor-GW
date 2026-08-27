@@ -22,8 +22,8 @@ for iv_local = 1:numel(block.valence_bands)
             acc.chi0, vector, eden_pages, block.g_maps);
         pair_count = pair_count + 1;
         epsilon_progress(block, progress_work * pair_count / npairs, ...
-            sprintf('Eps q:%d ik:%d s:%d v:%d c:%d', ...
-            block.iq, block.ik, block.ispin, iv, ic));
+            sprintf('E q%d i%d p%d/%d v%d c%d', ...
+            block.iq, block.ik, pair_count, npairs, iv, ic));
     end
 end
 end

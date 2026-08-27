@@ -193,11 +193,11 @@ if isempty(msg)
         timeStr, bar, displayPercent * 100, elapsedStr, etaStr);
 else
     % 截断过长的消息以确保对齐
-    maxMsgLen = 28;
+    maxMsgLen = 36;
     if length(msg) > maxMsgLen
         msg = msg(1:maxMsgLen);
     end
-    fprintf('[%s] %-28s %s %6.2f%% | Elapsed: %s | ETA: %s', ...
+    fprintf('[%s] %-36s %s %6.2f%% | Elapsed: %s | ETA: %s', ...
         timeStr, msg, bar, displayPercent * 100, elapsedStr, etaStr);
 end
 
