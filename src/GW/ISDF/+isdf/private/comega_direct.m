@@ -49,7 +49,15 @@ print_progress(current, progress.total_work, ...
     'Message', sprintf('%s p%d/%d v%d c%d', ...
     progress.label, pair_count, npairs, left_band, right_band), ...
     'Task', progress.task, ...
-    'PercentStep', progress.percent_step);
+    'PercentStep', progress.percent_step, ...
+    'UpdateInterval', local_update_interval(progress));
+end
+
+function interval = local_update_interval(progress)
+interval = 5;
+if isfield(progress, 'update_interval') && ~isempty(progress.update_interval)
+    interval = progress.update_interval;
+end
 end
 
 function band = local_band(progress, field, index)

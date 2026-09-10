@@ -32,14 +32,20 @@ ind_mu = ind_mu(:);
 nmu = numel(ind_mu);
 c1 = complex(zeros(ngrid, nmu, 'like', left_components{1}));
 c2 = complex(zeros(nmu, nmu, 'like', left_components{1}));
+left_mu = cell(size(left_components));
+right_mu = cell(size(right_components));
+for icomponent = 1:numel(left_components)
+    left_mu{icomponent} = left_components{icomponent}(ind_mu, :);
+    right_mu{icomponent} = right_components{icomponent}(ind_mu, :);
+end
 for icomponent = 1:numel(left_components)
     left_i = left_components{icomponent};
     right_i = right_components{icomponent};
-    left_i_mu = left_i(ind_mu, :);
-    right_i_mu = right_i(ind_mu, :);
+    left_i_mu = left_mu{icomponent};
+    right_i_mu = right_mu{icomponent};
     for jcomponent = 1:numel(left_components)
-        left_j_mu = left_components{jcomponent}(ind_mu, :);
-        right_j_mu = right_components{jcomponent}(ind_mu, :);
+        left_j_mu = left_mu{jcomponent};
+        right_j_mu = right_mu{jcomponent};
         c1 = c1 + (conj(left_i) * left_j_mu.') .* ...
             (right_i * conj(right_j_mu).');
         c2 = c2 + (conj(left_i_mu) * left_j_mu.') .* ...

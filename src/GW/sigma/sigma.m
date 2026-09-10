@@ -1,5 +1,7 @@
 function sig = sigma(eps, sig, sys, options, syms)
 sig = sigma_set_defaults(sig);
+gw_timer('reset');
+gw_timer('start', 'Sigma total');
 ctx = sigma_context(eps, sig, sys, options, syms);
 sig = ctx.sig;
 ryd = ctx.ryd;
@@ -21,6 +23,9 @@ if use_gpu
 end
 
 ops = sigma_ops(ctx);
+if strcmp(ctx.method, 'reduced_basis') || strcmp(ctx.method, 'matrix_elements')
+    sigma_isdf_component_cache('reset');
+end
 
 ndiag = ndiag_max - ndiag_min + 1;
 aqsch = cell(nbands, nspin);
@@ -40,16 +45,21 @@ elseif sig.freq_dep == 0
 end
 %%
 % Precompute wavefunctions for all k-points and spins
+gw_timer('start', 'Sigma wavefunction setup');
 [wfnk_all, wfnkq_all, idx_all, igpp, valid_indices] = ...
     sigma_precompute_wavefunctions(ctx);
+gw_timer('stop', 'Sigma wavefunction setup');
 %%
 
-fprintf('Starting sigma calculation loop over spins and bands...\n');
+fprintf('Starting sigma calculation (%d spin channel(s), %d band(s))...\n', ...
+    nspin, ndiag);
 sigma_q_work = sum(cellfun(@(kdata) kdata.nrk, ctx.kdata));
 sigma_block_work = max(1, ctx.nbands);
 total_sigma_work = nspin * ndiag * sigma_q_work * sigma_block_work;
 current_sigma_work = 0;
 sigma_task = 'sigma_main';
+progress_percent_step = 10;
+progress_update_interval = 5;
 print_progress(0, total_sigma_work, ...
     'Message', 'Sigma', ...
     'Task', sigma_task, ...
@@ -60,7 +70,6 @@ for ispin = 1 : nspin
     fprintf('Processing spin %d of %d...\n', ispin, nspin);
     
     for in = ndiag_min : ndiag_max
-        fprintf('\n Band %d (index %d/%d)', in, in - ndiag_min + 1, ndiag);
         for ik = 1 : sig.nkn
             kdata = ctx.kdata{ik};
             rk = kdata.rk;
@@ -116,7 +125,8 @@ for ispin = 1 : nspin
                     'completed_before', current_sigma_work, ...
                     'block_work', sigma_block_work, ...
                     'total_work', total_sigma_work, ...
-                    'percent_step', 1);
+                    'percent_step', progress_percent_step, ...
+                    'update_interval', progress_update_interval);
                 matrix_elements = ops.matrix_elements(block);
                 if sig.exact_static_ch && block.iq_fbz == 1
                     aqsch{in, ispin} = matrix_elements.gme(:, in);
@@ -165,7 +175,8 @@ for ispin = 1 : nspin
                     'Message', sprintf('S b%d i%d q%d done', ...
                     in, ik, iq), ...
                     'Task', sigma_task, ...
-                    'PercentStep', 1);
+                    'PercentStep', progress_percent_step, ...
+                    'UpdateInterval', progress_update_interval);
             end
         end
     end
@@ -192,4 +203,9 @@ if sig.freq_dep == 2
 end
 
 fprintf('\nCalculation completed.\n');
+gw_timer('stop', 'Sigma total');
+gw_timer('report', 'Sigma timing information');
+if strcmp(ctx.method, 'reduced_basis') || strcmp(ctx.method, 'matrix_elements')
+    sigma_isdf_component_cache('reset');
+end
 end

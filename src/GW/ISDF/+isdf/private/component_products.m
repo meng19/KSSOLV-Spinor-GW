@@ -61,17 +61,33 @@ else
             ['Projection row count must match the number of ' ...
              'left-right band pairs.']);
     end
-    products = complex(zeros(numel(grid_indices), size(projection, 2), ...
+    nprojection = size(projection, 2);
+    products = complex(zeros(numel(grid_indices), nprojection, ...
         'like', left{1}));
-    for iprojection = 1:size(projection, 2)
-        projection_matrix = reshape(projection(:, iprojection), ...
-            nleft, nright);
-        for icomponent = 1:numel(left)
-            left_values = left{icomponent}(grid_indices, :);
-            right_values = right{icomponent}(grid_indices, :);
-            products(:, iprojection) = products(:, iprojection) + ...
-                sum((conj(left_values) * projection_matrix) .* ...
-                right_values, 2);
+    ngrid_selected = numel(grid_indices);
+    % Batch projection columns so that each component uses one BLAS GEMM
+    % instead of one GEMM per projection.  Limit the Ngrid-by-Nright-by-Nb
+    % temporary to roughly two million complex elements.
+    max_batch_elements = 2e6;
+    projection_block_size = min(nprojection, max(1, floor( ...
+        max_batch_elements / max(1, ngrid_selected * nright))));
+    for icomponent = 1:numel(left)
+        left_values = left{icomponent}(grid_indices, :);
+        right_values = right{icomponent}(grid_indices, :);
+        for first_projection = 1:projection_block_size:nprojection
+            last_projection = min(nprojection, ...
+                first_projection + projection_block_size - 1);
+            block_indices = first_projection:last_projection;
+            nblock = numel(block_indices);
+            projection_block = reshape(projection(:, block_indices), ...
+                nleft, nright * nblock);
+            transformed_left = conj(left_values) * projection_block;
+            transformed_left = reshape(transformed_left, ...
+                ngrid_selected, nright, nblock);
+            weighted_right = transformed_left .* reshape(right_values, ...
+                ngrid_selected, nright, 1);
+            products(:, block_indices) = products(:, block_indices) + ...
+                reshape(sum(weighted_right, 2), ngrid_selected, nblock);
         end
     end
 end

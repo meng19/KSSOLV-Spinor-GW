@@ -44,6 +44,24 @@ if ~isfield(sig.isdf, 'seed')
     sig.isdf.seed = 0;
 end
 
+% The legacy path uses the NN product space for every sigma contribution.
+% A VN space can be selected explicitly for the bare-exchange term only.
+if ~isfield(sig.isdf, 'exchange_space') || isempty(sig.isdf.exchange_space)
+    sig.isdf.exchange_space = 'nn';
+end
+if ~isfield(sig.isdf, 'global_nn_space') || isempty(sig.isdf.global_nn_space)
+    sig.isdf.global_nn_space = false;
+end
+if ~isfield(sig.isdf, 'global_vn_space') || isempty(sig.isdf.global_vn_space)
+    sig.isdf.global_vn_space = false;
+end
+if ~isfield(sig.isdf, 'reuse_nn_for_vn') || isempty(sig.isdf.reuse_nn_for_vn)
+    sig.isdf.reuse_nn_for_vn = false;
+end
+if ~isfield(sig.isdf, 'reuse_eps_real_wfn') || isempty(sig.isdf.reuse_eps_real_wfn)
+    sig.isdf.reuse_eps_real_wfn = false;
+end
+
 if ~isfield(sig.isdf, 'algorithm') || isempty(sig.isdf.algorithm)
     if sig.freq_dep == 0
         sig.isdf.algorithm = 'reduced_basis';

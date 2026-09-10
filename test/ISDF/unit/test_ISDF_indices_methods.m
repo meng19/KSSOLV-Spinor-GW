@@ -17,6 +17,14 @@ nphi = 3;
 npsi = 4;
 rank_mu = 6;
 
+typed_options = struct('rank', 99, 'rank_vc', 5, ...
+    'rank_ratio_nn', 2);
+vc_options = isdf.options_for_type(typed_options, 'vc');
+assert(vc_options.rank == 5, 'rank_vc must override the generic rank.');
+nn_options = isdf.options_for_type(typed_options, 'nn');
+assert(~isfield(nn_options, 'rank') && nn_options.rank_ratio == 2, ...
+    'rank_ratio_nn must request automatic NN rank selection.');
+
 phi = randn(ngrid, nphi) + 1i * randn(ngrid, nphi);
 psi = randn(ngrid, npsi) + 1i * randn(ngrid, npsi);
 idx_q = (1:ngrid).';
@@ -41,6 +49,36 @@ for imethod = 1:numel(methods)
     assert(all(ind_mu >= 1) && all(ind_mu <= ngrid), ...
         '%s returned out-of-range interpolation points.', methods{imethod});
 end
+
+adaptive_options = struct();
+adaptive_options.rank = 2;
+adaptive_options.sample_method = 'qrcp';
+adaptive_options.adaptive_rank_enable = true;
+adaptive_options.adaptive_rank_tol = 1e-12;
+adaptive_options.adaptive_rank_step = 2;
+adaptive_options.adaptive_rank_max = nphi * npsi;
+adaptive_options.warn_rank_selection = false;
+adaptive_space = isdf.build_space(conj(phi), psi, idx_q, fftgrid, ...
+    adaptive_options);
+assert(adaptive_space.adaptive_info.enabled, ...
+    'Adaptive QRCP metadata was not recorded.');
+assert(adaptive_space.adaptive_info.reached_tolerance, ...
+    'Adaptive QRCP did not reach the requested residual tolerance.');
+assert(adaptive_space.rank >= adaptive_options.rank && ...
+    adaptive_space.rank <= adaptive_options.adaptive_rank_max, ...
+    'Adaptive QRCP returned a rank outside its requested bounds.');
+assert(strcmp(adaptive_space.adaptive_info.residual_kind, 'exact_residual'));
+
+adaptive_randomized_options = adaptive_options;
+adaptive_randomized_options.sample_method = 'qrcp_randomized';
+adaptive_randomized_options.adaptive_validation_rank = nphi * npsi;
+adaptive_randomized_space = isdf.build_space(conj(phi), psi, idx_q, ...
+    fftgrid, adaptive_randomized_options);
+assert(adaptive_randomized_space.adaptive_info.enabled && ...
+    adaptive_randomized_space.adaptive_info.reached_tolerance, ...
+    'Adaptive randomized QRCP did not reach the requested validation tolerance.');
+assert(strcmp(adaptive_randomized_space.adaptive_info.residual_kind, ...
+    'randomized_validation'));
 
 options = struct();
 options.rank = nphi * npsi;

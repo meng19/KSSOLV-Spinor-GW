@@ -15,4 +15,12 @@ if acc.need_screened_w
 end
 acc.rank{block.ispin, block.ik} = contribution.space.rank;
 acc.info{block.ispin, block.ik} = contribution.polar.info;
+if ~isempty(acc.real_wfn)
+    for ispinor = 1:numel(contribution.real_wfn_k) / 2
+        acc.real_wfn{contribution.real_wfn_k(1), block.ispin, ispinor} = ...
+            contribution.real_wfn{1}{ispinor};
+        acc.real_wfn{contribution.real_wfn_k(2), block.ispin, ispinor} = ...
+            contribution.real_wfn{2}{ispinor};
+    end
+end
 end

@@ -20,15 +20,19 @@ if ctx.sig.freq_dep == 2
 else
     achx_loc_nn = [];
 end
-omega = [];
-iw_lda = [];
+if ctx.sig.freq_dep == 2
+    omega = [];
+    iw_lda = [];
+end
 progress_work = local_progress_work(block);
 for nn = 1:ctx.nbands
     aqs_nocut = matrix_elements.gme(:, nn);
     aqs_cutoff = aqs_nocut(1:block.n_cutoff, 1);
     if block.occ_kq(nn) > 0
+        aqs_exchange = local_exchange_matrix_element( ...
+            matrix_elements, nn, aqs_nocut);
         ax_loc = ax_loc - block.occ_kq(nn) * ctx.fact * ...
-            sum(abs(aqs_nocut).^2 .* block.coulg);
+            sum(abs(aqs_exchange).^2 .* block.coulg);
     end
     if ctx.sig.freq_dep == 0
         [asx_loc, ach_loc] = sigma_cohsex(asx_loc, ach_loc, ...
@@ -61,9 +65,32 @@ if ctx.sig.exact_static_ch
     end
 end
 
-contribution = sigma_make_contribution( ...
-    ctx, asx_loc, ax_loc, ach_loc, achx_loc, ...
-    omega, iw_lda, achx_loc_nn);
+if ctx.sig.freq_dep == 2
+    contribution = sigma_make_contribution( ...
+        ctx, asx_loc, ax_loc, ach_loc, achx_loc, ...
+        omega, iw_lda, achx_loc_nn);
+else
+    contribution = sigma_make_contribution( ...
+        ctx, asx_loc, ax_loc, ach_loc, achx_loc);
+end
+end
+
+function aqs = local_exchange_matrix_element(matrix_elements, nn, fallback)
+if isfield(matrix_elements, 'gme_exchange') && ...
+        ~isempty(matrix_elements.gme_exchange)
+    exchange = matrix_elements.gme_exchange;
+    if isstruct(exchange)
+        index = find(exchange.bands == nn, 1);
+        if ~isempty(index)
+            aqs = exchange.values(:, index);
+            return;
+        end
+    else
+        aqs = exchange(:, nn);
+        return;
+    end
+end
+aqs = fallback;
 end
 
 function work = local_progress_work(block)

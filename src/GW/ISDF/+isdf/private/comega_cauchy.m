@@ -64,20 +64,28 @@ if isa(left{1}, 'gpuArray')
     ev_occ_work = gpuArray(ev_occ_work);
     ev_unocc_work = gpuArray(ev_unocc_work);
 end
-products = component_products(left, right, [], []);
 previous = [];
 relative_error = inf;
 for iteration = 1:options.MaxIter
     npoints = 2^(iteration + 3);
-    result = complex(zeros(nmu, nmu, 'like', left{1}));
-    for ipoint = 0:npoints-1
+    if isempty(previous)
+        result = complex(zeros(nmu, nmu, 'like', left{1}));
+        point_indices = 0:npoints-1;
+    else
+        % The nodes for npoints/2 are the even nodes for npoints.  Reuse
+        % their completed trapezoidal sum and evaluate only the new odd
+        % nodes, rather than recomputing all Cauchy products.
+        result = 0.5 * previous;
+        point_indices = 1:2:npoints-1;
+    end
+    for ipoint = point_indices
         theta = 2 * pi * ipoint / npoints;
         exp_theta = exp(1i * theta);
         z = center + radius * exp_theta;
         occ_weight = 1 ./ (z - ev_occ_work);
         unocc_weight = 1 ./ (z - ev_unocc_work);
         result = result + local_weighted_products( ...
-            products, occ_weight, unocc_weight) * ...
+            left, right, occ_weight, unocc_weight) * ...
             (radius * exp_theta / npoints);
     end
     if ~isempty(previous)
@@ -91,10 +99,27 @@ for iteration = 1:options.MaxIter
 end
 end
 
-function value = local_weighted_products(products, occ_weight, unocc_weight)
-pair_weight = reshape(occ_weight(:) * unocc_weight(:).', 1, []);
-weighted_products = bsxfun(@times, products, pair_weight);
-value = weighted_products * products';
+function value = local_weighted_products(left, right, occ_weight, unocc_weight)
+% Exploit the separable pair weight w(v,c)=w_v(v)*w_c(c).  Forming the
+% full Nmu-by-(Nv*Nc) product matrix here is both the dominant allocation
+% and the dominant arithmetic cost.  Expanding the component products gives
+%   sum_{s,t} [(conj(L_s).*w_v)*L_t.'] .* [(R_s.*w_c)*R_t'].
+% This uses only Nmu-by-Nmu intermediates and BLAS GEMMs.
+nmu = size(left{1}, 1);
+value = complex(zeros(nmu, nmu, 'like', left{1}));
+occ_weight = reshape(occ_weight, 1, []);
+unocc_weight = reshape(unocc_weight, 1, []);
+for ileft_component = 1:numel(left)
+    weighted_left = bsxfun(@times, conj(left{ileft_component}), ...
+        occ_weight);
+    weighted_right = bsxfun(@times, right{ileft_component}, ...
+        unocc_weight);
+    for iright_component = 1:numel(left)
+        left_gram = weighted_left * left{iright_component}.';
+        right_gram = weighted_right * right{iright_component}';
+        value = value + left_gram .* right_gram;
+    end
+end
 end
 
 function [center, radius, ok] = local_contour(ev_occ, ev_unocc)

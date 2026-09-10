@@ -19,4 +19,9 @@ acc.zeta_blocks = {};
 acc.coeff_blocks = {};
 acc.rank = cell(ctx.nspin, ctx.qdata{iq}.nrq);
 acc.info = cell(ctx.nspin, ctx.qdata{iq}.nrq);
+if ctx.eps.isdf.cache_real_wfn
+    acc.real_wfn = cell(ctx.sys.nkpts, ctx.nspin, ctx.nspinor);
+else
+    acc.real_wfn = [];
+end
 end

@@ -1,5 +1,7 @@
 function eps = epsilon(sys, options, syms, eps)
 eps = epsilon_set_defaults(eps);
+gw_timer('reset');
+gw_timer('start', 'Epsilon total');
 ctx = epsilon_context(sys, options, syms, eps);
 nbands = ctx.nbands;
 nspin = ctx.nspin;
@@ -31,8 +33,10 @@ else
 end
 
 %% Precompute wavefunctions for all k-points and spins
+gw_timer('start', 'Epsilon wavefunction setup');
 [wfnk_all, wfnkq_all, fft_all, idx_all] = ...
     epsilon_precompute_wavefunctions(ctx);
+gw_timer('stop', 'Epsilon wavefunction setup');
 
 %% Main loop
 fprintf('Starting main epsilon calculation loop...\n');
@@ -42,6 +46,8 @@ total_epsilon_work = epsilon_block_work * nspin * sum(cellfun( ...
     @(qdata) qdata.nrq, ctx.qdata));
 current_epsilon_work = 0;
 epsilon_task = 'epsilon_main';
+progress_percent_step = 10;
+progress_update_interval = 5;
 print_progress(0, total_epsilon_work, ...
     'Message', 'Epsilon', ...
     'Task', epsilon_task, ...
@@ -67,7 +73,8 @@ for iq = 1:ctx.nq
                 'completed_before', current_epsilon_work, ...
                 'block_work', epsilon_block_work, ...
                 'total_work', total_epsilon_work, ...
-                'percent_step', 1);
+                'percent_step', progress_percent_step, ...
+                'update_interval', progress_update_interval);
             if isempty(block.valence_bands) || isempty(block.conduction_bands)
                 current_epsilon_work = current_epsilon_work + ...
                     epsilon_block_work;
@@ -75,7 +82,8 @@ for iq = 1:ctx.nq
                     'Message', sprintf('E q%d i%d s%d done', ...
                     iq, ik, ispin), ...
                     'Task', epsilon_task, ...
-                    'PercentStep', 1);
+                    'PercentStep', progress_percent_step, ...
+                    'UpdateInterval', progress_update_interval);
                 continue;
             end
 
@@ -88,12 +96,14 @@ for iq = 1:ctx.nq
                 'Message', sprintf('E q%d i%d s%d done', ...
                 iq, ik, ispin), ...
                 'Task', epsilon_task, ...
-                'PercentStep', 1);
+                'PercentStep', progress_percent_step, ...
+                'UpdateInterval', progress_update_interval);
         end
     end
     eps = ops.finalize(eps, acc, iq);
 end
 eps = epsilon_warn_cauchy_fallback(ctx, eps);
+gw_timer('stop', 'Epsilon total');
 
 % 存储结果
 eps.mtx = ctx.pol.mtx;
@@ -107,4 +117,5 @@ if use_gpu
 end
 
 fprintf('\nCalculation of epsilon completed successfully.\n');
+gw_timer('report', 'Epsilon timing information');
 end

@@ -54,6 +54,9 @@ end
 if ~isfield(eps.isdf, 'output') || isempty(eps.isdf.output)
     eps.isdf.output = 'screened_w';
 end
+if ~isfield(eps.isdf, 'cache_real_wfn') || isempty(eps.isdf.cache_real_wfn)
+    eps.isdf.cache_real_wfn = false;
+end
 
 if ~isfield(eps.isdf, 'cauchy_froErr') || isempty(eps.isdf.cauchy_froErr)
     eps.isdf.cauchy_froErr = 1e-8;

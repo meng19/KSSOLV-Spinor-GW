@@ -17,8 +17,10 @@ if size(block.screened_w.zeta_g, 1) ~= block.n_cutoff
 end
 
 target_zeta = matrix_elements.space.zeta_g(1:block.n_cutoff, :);
+gw_timer('start', 'Sigma screened kernel');
 kernel = isdf.screened_kernel( ...
     block.screened_w, target_zeta, block.coulg_cutoff);
+gw_timer('stop', 'Sigma screened kernel');
 asx_loc = 0;
 ax_loc = 0;
 ach_loc = 0;
@@ -31,17 +33,33 @@ if ctx.sig.freq_dep == 2
 else
     achx_loc_nn = [];
 end
-omega = [];
-iw_lda = [];
+if ctx.sig.freq_dep == 2
+    omega = [];
+    iw_lda = [];
+end
 progress_work = local_progress_work(block);
+if ctx.sig.freq_dep == 0
+    gw_timer('start', 'Sigma static contraction');
+    [asx_loc, ax_loc, ach_loc] = local_static_batch_contract( ...
+        ctx, block, matrix_elements, kernel(:, :, 1));
+    gw_timer('stop', 'Sigma static contraction');
+    sigma_progress(block, progress_work, ...
+        sprintf('S b%d i%d q%d batch %d/%d', ...
+        block.in, block.ik, block.iq, ctx.nbands, ctx.nbands));
+else
 for nn = 1:ctx.nbands
     aqs = matrix_elements.gme(:, nn);
     if block.occ_kq(nn) > 0
+        aqs_exchange = local_exchange_matrix_element(matrix_elements, nn, aqs);
         ax_loc = ax_loc - block.occ_kq(nn) * ctx.fact * ...
-            sum(abs(aqs).^2 .* block.coulg);
+            sum(abs(aqs_exchange).^2 .* block.coulg);
     end
 
-    coeff = matrix_elements.space.product_mu(:, nn);
+    if isfield(matrix_elements, 'coeff')
+        coeff = matrix_elements.coeff(:, nn);
+    else
+        coeff = matrix_elements.space.product_mu(:, nn);
+    end
     if ctx.sig.freq_dep == 0
         kernel_static = kernel(:, :, 1);
         screened_value = ctx.fact * isdf.screened_contract( ...
@@ -61,6 +79,7 @@ for nn = 1:ctx.nbands
         sprintf('S b%d i%d q%d n%d/%d', ...
         block.in, block.ik, block.iq, nn, ctx.nbands));
 end
+end
 
 achx_loc = 0;
 if ctx.sig.exact_static_ch
@@ -79,9 +98,73 @@ if ctx.sig.exact_static_ch
     end
 end
 
-contribution = sigma_make_contribution( ...
-    ctx, asx_loc, ax_loc, ach_loc, achx_loc, ...
-    omega, iw_lda, achx_loc_nn);
+if ctx.sig.freq_dep == 2
+    contribution = sigma_make_contribution( ...
+        ctx, asx_loc, ax_loc, ach_loc, achx_loc, ...
+        omega, iw_lda, achx_loc_nn);
+else
+    contribution = sigma_make_contribution( ...
+        ctx, asx_loc, ax_loc, ach_loc, achx_loc);
+end
+end
+
+function [asx_loc, ax_loc, ach_loc] = local_static_batch_contract( ...
+        ctx, block, matrix_elements, kernel)
+% Evaluate all static NN contractions as dense matrix products.  For C
+% containing one ISDF coefficient column per summation band, the desired
+% values are diag(C.' * kernel * conj(C)).
+
+coeff = local_coefficients(matrix_elements, ctx.nbands);
+kernel_coeff = kernel * conj(coeff);
+screened_values = ctx.fact * sum(coeff .* kernel_coeff, 1);
+
+occ = reshape(block.occ_kq, 1, []);
+if isa(screened_values, 'gpuArray') && ~isa(occ, 'gpuArray')
+    occ = gpuArray(occ);
+end
+asx_loc = -sum(occ .* screened_values);
+ax_loc = local_batch_exchange(ctx, block, matrix_elements, occ);
+ach_loc = sum(screened_values);
+end
+
+function ax_loc = local_batch_exchange(ctx, block, matrix_elements, occ)
+if isfield(matrix_elements, 'gme_exchange') && ...
+        isstruct(matrix_elements.gme_exchange)
+    bands = matrix_elements.gme_exchange.bands;
+    values = matrix_elements.gme_exchange.values;
+    exchange_values = sum(bsxfun(@times, abs(values).^2, block.coulg), 1);
+    ax_loc = -ctx.fact * sum(occ(bands) .* exchange_values);
+    return;
+end
+exchange_values = sum(bsxfun(@times, abs(matrix_elements.gme).^2, ...
+    block.coulg), 1);
+ax_loc = -ctx.fact * sum(occ .* exchange_values);
+end
+
+function coeff = local_coefficients(matrix_elements, nbands)
+if isfield(matrix_elements, 'coeff')
+    coeff = matrix_elements.coeff;
+else
+    coeff = matrix_elements.space.product_mu(:, 1:nbands);
+end
+end
+
+function aqs = local_exchange_matrix_element(matrix_elements, nn, fallback)
+if isfield(matrix_elements, 'gme_exchange') && ...
+        ~isempty(matrix_elements.gme_exchange)
+    exchange = matrix_elements.gme_exchange;
+    if isstruct(exchange)
+        index = find(exchange.bands == nn, 1);
+        if ~isempty(index)
+            aqs = exchange.values(:, index);
+            return;
+        end
+    else
+        aqs = exchange(:, nn);
+        return;
+    end
+end
+aqs = fallback;
 end
 
 function work = local_progress_work(block)

@@ -24,21 +24,41 @@ options = set_defaults(options, nleft, nright, ngrid);
 if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
     options.fftgrid = fftgrid;
 end
-
-[ind_mu, products] = sample_points(left, right, options);
+local_progress(options, 0.02, 'setup');
+[ind_mu, products, adaptive_state] = sample_points(left, right, options);
+local_progress(options, 0.35, 'sample points');
+adaptive_info = struct('enabled', false, 'residual', NaN, ...
+    'initial_rank', options.rank, 'final_rank', options.rank, ...
+    'tolerance', NaN, 'reached_tolerance', false);
+if adaptive_state.enabled
+    adaptive_info = rmfield(adaptive_state, {'has_zeta', 'zeta', 'solve_info'});
+    options.rank = adaptive_info.final_rank;
+    options.rank_source = 'adaptive_qrcp';
+end
+local_print_rank(options, ngrid, nleft, nright);
 if isempty(products)
     product_mu = component_products(left, right, ind_mu, []);
 else
     product_mu = products(ind_mu, :);
 end
+local_progress(options, 0.45, 'product values');
 
-if strcmpi(options.sample_method, 'qrcp') && numel(left) > 1
+if adaptive_state.enabled && adaptive_state.has_zeta
+    zeta_real = adaptive_state.zeta;
+    solve_info = adaptive_state.solve_info;
+    zeta_g = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
+elseif strcmpi(options.sample_method, 'qrcp') && numel(left) > 1
+    local_progress(options, 0.50, 'interpolation solve');
     [zeta_real, solve_info] = stable_solve(products, product_mu, options);
+    local_progress(options, 0.82, 'Fourier transform');
     zeta_g = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
 else
+    local_progress(options, 0.50, 'product Gram');
     [c1, c2] = product_gram(left, right, ind_mu);
+    local_progress(options, 0.78, 'interpolation solve and FFT');
     [zeta_g, solve_info] = zeta_to_g(c1, c2, idx_q, fftgrid, options);
 end
+local_progress(options, 0.95, 'complete');
 
 space = struct();
 if numel(left) == 1
@@ -62,9 +82,41 @@ end
 space.rank = numel(ind_mu);
 space.options = options;
 space.solve_info = solve_info;
+space.adaptive_info = adaptive_info;
 if numel(left) > 1 && ~strcmpi(options.sample_method, 'qrcp')
     space.ngrid = ngrid;
     space.nleft = nleft;
     space.nright = nright;
 end
+end
+
+function local_progress(options, fraction, stage)
+if isfield(options, 'progress') && isa(options.progress, 'function_handle')
+    options.progress(fraction, stage);
+end
+end
+
+function local_print_rank(options, ngrid, nleft, nright)
+if isfield(options, 'print_rank') && ~options.print_rank
+    return;
+end
+
+persistent printed_keys;
+if isempty(printed_keys)
+    printed_keys = {};
+end
+
+key = sprintf('%s:%s:%d:%d:%d:%d:%d:%d:%.16g', ...
+    lower(char(options.sample_method)), lower(char(options.rank_source)), ...
+    ngrid, nleft, nright, options.rank, options.recommended_rank, ...
+    options.max_rank, options.rank_ratio);
+if any(strcmp(printed_keys, key))
+    return;
+end
+printed_keys{end + 1} = key;
+
+fprintf(['\nISDF rank: rank = %d, recommended = ' ...
+    'ceil(sqrt(%d*%d)*%.3g) = %d\n'], ...
+    options.rank, nleft, nright, options.rank_ratio, ...
+    options.recommended_rank);
 end

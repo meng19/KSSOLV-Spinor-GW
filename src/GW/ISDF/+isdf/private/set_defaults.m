@@ -76,6 +76,26 @@ end
 if ~isfield(options, 'random_oversampling') || isempty(options.random_oversampling)
     options.random_oversampling = 1.2;
 end
+if ~isfield(options, 'adaptive_rank_enable') || isempty(options.adaptive_rank_enable)
+    options.adaptive_rank_enable = false;
+end
+if ~isfield(options, 'adaptive_rank_tol') || isempty(options.adaptive_rank_tol)
+    options.adaptive_rank_tol = 1e-6;
+end
+if ~isfield(options, 'adaptive_rank_step') || isempty(options.adaptive_rank_step)
+    options.adaptive_rank_step = max(1, ceil(sqrt(nleft * nright)));
+end
+if ~isfield(options, 'adaptive_rank_max') || isempty(options.adaptive_rank_max)
+    options.adaptive_rank_max = max_rank;
+end
+if ~isfield(options, 'adaptive_validation_rank') || ...
+        isempty(options.adaptive_validation_rank)
+    options.adaptive_validation_rank = max(16, options.adaptive_rank_step);
+end
+options.adaptive_rank_max = min(max(1, ceil(options.adaptive_rank_max)), max_rank);
+options.adaptive_rank_step = max(1, ceil(options.adaptive_rank_step));
+options.adaptive_validation_rank = max(1, ...
+    ceil(options.adaptive_validation_rank));
 end
 
 function warn_once(identifier, key, message, varargin)
