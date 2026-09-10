@@ -1,0 +1,51 @@
+{
+  "rng_seed": 0,
+  "read_vxc": true,
+  "qe_path": "../../example/qe_data/si8",
+  "epsilon": {
+    "nbnd": 48,
+    "freq_dep": 0,
+    "cutoff": 15,
+    "coul_cut": "spherical_truncation",
+    "coul_cutoff": 5,
+    "save_mem": false,
+    "use_gpu": false,
+    "precompute_wav": false,
+    "isdf": {
+      "enable": true,
+      "algorithm": "reduced_basis",
+      "output": "screened_w",
+      "sample_method": "qrcp_randomized",
+      "rank_ratio_vc": 2,
+      "adaptive_rank_enable": false,
+      "seed": 0,
+      "reduced_solver": "cauchy"
+    }
+  },
+  "sigma": {
+    "nbnd": 48,
+    "ndiag_min": 1,
+    "ndiag_max": 2,
+    "freq_dep": 0,
+    "coul_cut": "spherical_truncation",
+    "coul_cutoff": 5,
+    "no_symmetries_q_grid": false,
+    "exact_static_ch": false,
+    "use_gpu": false,
+    "precompute_wav": false,
+    "isdf": {
+      "enable": true,
+      "algorithm": "reduced_basis",
+      "sample_method": "qrcp_randomized",
+      "rank_ratio_nn": 2,
+      "rank_ratio_vn": 3,
+      "exchange_space": "vn",
+      "reuse_nn_for_vn": false,
+      "adaptive_rank_enable": false,
+      "global_nn_space": true,
+      "global_vn_space": true,
+      "seed": 0,
+      "reduced_solver": "cauchy"
+    }
+  }
+}
