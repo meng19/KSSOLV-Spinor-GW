@@ -60,7 +60,7 @@ qp_file = fullfile(config_dir, 'qp.dat');
 if isfield(config, 'qp_file') && ~isempty(config.qp_file)
     qp_file = local_absolute_path(char(config.qp_file), config_dir);
 end
-gw_write_qp_dat(sig, qp_file);
+local_write_qp_dat(sig, qp_file);
 fprintf('Quasiparticle levels:   %s\n', qp_file);
 
 if isfield(config, 'save_file') && ~isempty(config.save_file)
@@ -105,5 +105,68 @@ elseif startsWith(path_in, filesep)
     path_out = path_in;
 else
     path_out = fullfile(base_dir, path_in);
+end
+end
+
+function local_write_qp_dat(sig, filename)
+% Write quasiparticle levels in BerkeleyGW-style qp.dat form (all energies eV).
+required = {'emf', 'ax', 'asx', 'ach', 'achx', 'sig', 'vxc', 'eqp0'};
+for ii = 1:numel(required)
+    if ~isfield(sig, required{ii})
+        error('gw_run_json:MissingQPField', ...
+            'sig.%s is required; run sigma before writing qp.dat.', required{ii});
+    end
+end
+
+filename = char(filename);
+output_dir = fileparts(filename);
+if ~isempty(output_dir) && ~isfolder(output_dir)
+    mkdir(output_dir);
+end
+fid = fopen(filename, 'w');
+if fid < 0
+    error('gw_run_json:QPFileOpenFailed', 'Cannot open %s for writing.', filename);
+end
+cleanup = onCleanup(@() fclose(fid));
+
+has_eqp1 = isfield(sig, 'eqp1') && ~isempty(sig.eqp1);
+nspin = size(sig.eqp0, 3);
+nkn = size(sig.eqp0, 2);
+ndiag = size(sig.eqp0, 1);
+if isfield(sig, 'ndiag_min')
+    bands = sig.ndiag_min + (0:ndiag - 1);
+else
+    bands = 1:ndiag;
+end
+include_k_spin = nkn > 1 || nspin > 1;
+if include_k_spin
+    fprintf(fid, '%4s %4s %5s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n', ...
+        'n', 'k', 'spin', 'Emf', 'Eo', 'X', 'SX-X', 'CH', 'Sig', 'Vxc', 'Eqp0', 'Eqp1');
+else
+    fprintf(fid, '%4s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n', ...
+        'n', 'Emf', 'Eo', 'X', 'SX-X', 'CH', 'Sig', 'Vxc', 'Eqp0', 'Eqp1');
+end
+
+for ispin = 1:nspin
+    for ik = 1:nkn
+        for in = 1:ndiag
+            eqp1 = sig.eqp0(in, ik, ispin);
+            if has_eqp1
+                eqp1 = sig.eqp1(in, ik, ispin);
+            end
+            emf = sig.emf(in, ik, ispin);
+            ch = sig.ach(in, ik, ispin) + sig.achx(in, ik, ispin);
+            values = real([emf, emf, sig.ax(in, ik, ispin), ...
+                sig.asx(in, ik, ispin), ch, sig.sig(in, ik, ispin), ...
+                sig.vxc(in, ik, ispin), sig.eqp0(in, ik, ispin), eqp1]);
+            if include_k_spin
+                fprintf(fid, '%4d %4d %5d', bands(in), ik, ispin);
+            else
+                fprintf(fid, '%4d', bands(in));
+            end
+            fprintf(fid, ' %12.6f', values);
+            fprintf(fid, '\n');
+        end
+    end
 end
 end
