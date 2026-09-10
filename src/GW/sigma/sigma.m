@@ -202,6 +202,14 @@ if sig.freq_dep == 2
     sig = get_eqp1(nspin, ndiag_min, ndiag_max, emf, omega_storage, iw_lda_storage, asx_freq, ach_freq, achx, ax, sig);
 end
 
+% Retain the energy-resolved terms used by qp.dat writers.  They are in eV
+% and have the same diagonal-band layout as eqp0/eqp1.
+sig.emf = emf(ndiag_min:ndiag_max, :, :);
+sig.ax = real(ax) * ryd;
+sig.asx = real(asx) * ryd;
+sig.ach = real(ach) * ryd;
+sig.achx = real(achx) * ryd;
+
 fprintf('\nCalculation completed.\n');
 gw_timer('stop', 'Sigma total');
 gw_timer('report', 'Sigma timing information');

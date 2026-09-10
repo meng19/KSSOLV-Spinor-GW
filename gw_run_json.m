@@ -56,6 +56,13 @@ eps = epsilon(sys, options, syms, eps);
 sig = config.sigma;
 sig = sigma(eps, sig, sys, options, syms);
 
+qp_file = fullfile(config_dir, 'qp.dat');
+if isfield(config, 'qp_file') && ~isempty(config.qp_file)
+    qp_file = local_absolute_path(char(config.qp_file), config_dir);
+end
+gw_write_qp_dat(sig, qp_file);
+fprintf('Quasiparticle levels:   %s\n', qp_file);
+
 if isfield(config, 'save_file') && ~isempty(config.save_file)
     save_file = local_absolute_path(char(config.save_file), config_dir);
     save_dir = fileparts(save_file);
