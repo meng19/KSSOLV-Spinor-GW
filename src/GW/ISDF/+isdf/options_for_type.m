@@ -11,6 +11,7 @@ if ~any(strcmp(product_type, {'vc', 'vn', 'nn'}))
     error('ISDF:UnknownProductType', ...
         'Unknown ISDF product-space type "%s".', product_type);
 end
+options.product_type = product_type;
 
 rank_field = ['rank_' product_type];
 ratio_field = ['rank_ratio_' product_type];

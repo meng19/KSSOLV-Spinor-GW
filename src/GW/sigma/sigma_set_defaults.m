@@ -43,6 +43,18 @@ end
 if ~isfield(sig.isdf, 'seed')
     sig.isdf.seed = 0;
 end
+if ~isfield(sig.isdf, 'sample_precision') || isempty(sig.isdf.sample_precision)
+    sig.isdf.sample_precision = 'double';
+end
+if ~isfield(sig.isdf, 'interpolation_solver') || isempty(sig.isdf.interpolation_solver)
+    sig.isdf.interpolation_solver = 'direct';
+end
+if ~isfield(sig.isdf, 'svd_cutoff') || isempty(sig.isdf.svd_cutoff)
+    sig.isdf.svd_cutoff = 0;
+end
+if ~isfield(sig.isdf, 'svd_ratio') || isempty(sig.isdf.svd_ratio)
+    sig.isdf.svd_ratio = 0.5;
+end
 
 % The legacy path uses the NN product space for every sigma contribution.
 % A VN space can be selected explicitly for the bare-exchange term only.

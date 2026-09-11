@@ -2,7 +2,7 @@ function matrix_elements = sigma_matrix_elements(ctx, block, use_isdf)
 %SIGMA_MATRIX_ELEMENTS Build direct or ISDF sigma matrix elements.
 
 nq = numel(block.idx.q);
-progress_work = local_progress_work(block);
+progress_work = gw_block_work(block, 1);
 if use_isdf
     if isfield(ctx.sig.isdf, 'global_nn_space') && ...
             ctx.sig.isdf.global_nn_space
@@ -27,7 +27,7 @@ if use_isdf
             gme = reshape(gme3, nq, ctx.nbands);
             space = [];
         end
-        sigma_progress(block, progress_work * 0.5, ...
+        gw_block_progress(block, progress_work * 0.5, ...
             sprintf('S b%d i%d q%d me %d/%d', ...
             block.in, block.ik, block.iq, ctx.nbands, ctx.nbands));
         matrix_elements.gme = gme;
@@ -50,7 +50,7 @@ for nn = 1:ctx.nbands
     gme(:, nn) = getm_sigma(block.in, nn, ...
         block.wfnkq, block.wfnk, block.fft, block.idx, block.ispin, ...
         ctx.nspinor, ctx.use_gpu);
-    sigma_progress(block, progress_work * 0.5 * nn / ctx.nbands, ...
+    gw_block_progress(block, progress_work * 0.5 * nn / ctx.nbands, ...
         sprintf('S b%d i%d q%d me %d/%d', ...
         block.in, block.ik, block.iq, nn, ctx.nbands));
 end
@@ -67,6 +67,7 @@ key = sprintf('nn-space-k%d-q%d-s%d-n%d-b%d-%d', ...
     block.ik, block.iq, block.ispin, ctx.nbands, ...
     left_bands(1), left_bands(end));
 [entry, hit] = sigma_isdf_component_cache('get', key);
+space_status = 'reused';
 if ~hit
     left = local_left_components(ctx, block, left_bands);
     right = local_right_components(ctx, block);
@@ -85,6 +86,7 @@ if ~hit
     entry = struct('left_bands', left_bands, 'space', space, ...
         'gme_all', gme_all);
     sigma_isdf_component_cache('put', key, entry);
+    space_status = 'built';
 end
 
 left_index = find(entry.left_bands == block.in, 1);
@@ -100,9 +102,10 @@ matrix_elements.space = entry.space;
 % explicitly for the reduced screened-interaction contraction.
 matrix_elements.coeff = entry.space.product_mu(:, ...
     left_index:numel(entry.left_bands):end);
-sigma_progress(block, progress_work * 0.5, ...
-    sprintf('S b%d i%d q%d global-nn %d/%d', ...
-    block.in, block.ik, block.iq, ctx.nbands, ctx.nbands));
+gw_block_progress(block, progress_work * 0.5, ...
+    sprintf('S b%d k%d q%d NN %s: %d diag / %d sum', ...
+    block.in, block.ik, block.iq, space_status, ...
+    numel(left_bands), ctx.nbands));
 end
 
 function gme_exchange = local_vn_matrix_elements(ctx, block)
@@ -205,12 +208,4 @@ if ~any(strcmp(exchange_space, {'nn', 'vn'}))
 end
 tf = strcmp(exchange_space, 'vn') && ...
     ~ctx.sig.isdf.reuse_nn_for_vn;
-end
-
-function work = local_progress_work(block)
-if isfield(block, 'progress') && isfield(block.progress, 'block_work')
-    work = block.progress.block_work;
-else
-    work = 1;
-end
 end

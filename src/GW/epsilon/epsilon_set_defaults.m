@@ -46,6 +46,18 @@ end
 if ~isfield(eps.isdf, 'seed')
     eps.isdf.seed = 0;
 end
+if ~isfield(eps.isdf, 'sample_precision') || isempty(eps.isdf.sample_precision)
+    eps.isdf.sample_precision = 'double';
+end
+if ~isfield(eps.isdf, 'interpolation_solver') || isempty(eps.isdf.interpolation_solver)
+    eps.isdf.interpolation_solver = 'direct';
+end
+if ~isfield(eps.isdf, 'svd_cutoff') || isempty(eps.isdf.svd_cutoff)
+    eps.isdf.svd_cutoff = 0;
+end
+if ~isfield(eps.isdf, 'svd_ratio') || isempty(eps.isdf.svd_ratio)
+    eps.isdf.svd_ratio = 0.5;
+end
 
 if ~isfield(eps.isdf, 'reduced_solver') || isempty(eps.isdf.reduced_solver)
     eps.isdf.reduced_solver = 'cauchy';

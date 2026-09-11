@@ -76,6 +76,34 @@ end
 if ~isfield(options, 'random_oversampling') || isempty(options.random_oversampling)
     options.random_oversampling = 1.2;
 end
+if ~isfield(options, 'sample_precision') || isempty(options.sample_precision)
+    options.sample_precision = 'double';
+end
+options.sample_precision = lower(char(options.sample_precision));
+if ~any(strcmp(options.sample_precision, {'double', 'single'}))
+    error('ISDF:SamplePrecision', ...
+        'sample_precision must be ''double'' or ''single'' (got ''%s'').', ...
+        options.sample_precision);
+end
+if ~isfield(options, 'interpolation_solver') || isempty(options.interpolation_solver)
+    options.interpolation_solver = 'direct';
+end
+options.interpolation_solver = lower(char(options.interpolation_solver));
+if ~any(strcmp(options.interpolation_solver, {'direct', 'svd_whiten'}))
+    error('ISDF:InterpolationSolver', ...
+        'interpolation_solver must be ''direct'' or ''svd_whiten''.');
+end
+if ~isfield(options, 'svd_cutoff') || isempty(options.svd_cutoff)
+    options.svd_cutoff = 0;
+end
+if ~isfield(options, 'svd_ratio') || isempty(options.svd_ratio)
+    options.svd_ratio = 0.5;
+end
+if options.svd_cutoff < 0 || options.svd_cutoff >= 1 || ...
+        options.svd_ratio < 0 || options.svd_ratio > 1
+    error('ISDF:SVDOptions', ...
+        'svd_cutoff must be in [0,1), and svd_ratio must be in [0,1].');
+end
 if ~isfield(options, 'adaptive_rank_enable') || isempty(options.adaptive_rank_enable)
     options.adaptive_rank_enable = false;
 end

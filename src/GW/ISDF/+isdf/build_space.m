@@ -43,20 +43,39 @@ else
 end
 local_progress(options, 0.45, 'product values');
 
+transform = [];
 if adaptive_state.enabled && adaptive_state.has_zeta
+    if strcmp(options.interpolation_solver, 'svd_whiten')
+        error('ISDF:SVDWhitenAdaptive', ...
+            'svd_whiten is not supported with adaptive_rank_enable.');
+    end
     zeta_real = adaptive_state.zeta;
     solve_info = adaptive_state.solve_info;
     zeta_g = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
 elseif strcmpi(options.sample_method, 'qrcp') && numel(left) > 1
-    local_progress(options, 0.50, 'interpolation solve');
-    [zeta_real, solve_info] = stable_solve(products, product_mu, options);
-    local_progress(options, 0.82, 'Fourier transform');
-    zeta_g = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
+    if strcmp(options.interpolation_solver, 'svd_whiten')
+        local_progress(options, 0.50, 'product Gram and SVD whitening');
+        [c1, c2] = product_gram(left, right, ind_mu);
+        local_progress(options, 0.78, 'whitened interpolation and FFT');
+        [zeta_g, product_mu, transform, solve_info] = svd_whiten( ...
+            c1, c2, product_mu, idx_q, fftgrid, options);
+    else
+        local_progress(options, 0.50, 'interpolation solve');
+        [zeta_real, solve_info] = stable_solve(products, product_mu, options);
+        local_progress(options, 0.82, 'Fourier transform');
+        zeta_g = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
+    end
 else
     local_progress(options, 0.50, 'product Gram');
     [c1, c2] = product_gram(left, right, ind_mu);
-    local_progress(options, 0.78, 'interpolation solve and FFT');
-    [zeta_g, solve_info] = zeta_to_g(c1, c2, idx_q, fftgrid, options);
+    if strcmp(options.interpolation_solver, 'svd_whiten')
+        local_progress(options, 0.78, 'SVD whitening and FFT');
+        [zeta_g, product_mu, transform, solve_info] = svd_whiten( ...
+            c1, c2, product_mu, idx_q, fftgrid, options);
+    else
+        local_progress(options, 0.78, 'interpolation solve and FFT');
+        [zeta_g, solve_info] = zeta_to_g(c1, c2, idx_q, fftgrid, options);
+    end
 end
 local_progress(options, 0.95, 'complete');
 
@@ -80,6 +99,13 @@ for icomponent = 1:numel(left)
     space.right_mu_components{icomponent} = right{icomponent}(ind_mu, :);
 end
 space.rank = numel(ind_mu);
+space.sampling_rank = numel(ind_mu);
+if ~isempty(transform)
+    space.rank = size(transform, 1);
+    space.polar_transform = transform;
+    fprintf('ISDF SVD whitening: retained %d/%d modes (cutoff %.3g, ratio %.3g)\n', ...
+        space.rank, space.sampling_rank, options.svd_cutoff, options.svd_ratio);
+end
 space.options = options;
 space.solve_info = solve_info;
 space.adaptive_info = adaptive_info;
@@ -97,26 +123,5 @@ end
 end
 
 function local_print_rank(options, ngrid, nleft, nright)
-if isfield(options, 'print_rank') && ~options.print_rank
-    return;
-end
-
-persistent printed_keys;
-if isempty(printed_keys)
-    printed_keys = {};
-end
-
-key = sprintf('%s:%s:%d:%d:%d:%d:%d:%d:%.16g', ...
-    lower(char(options.sample_method)), lower(char(options.rank_source)), ...
-    ngrid, nleft, nright, options.rank, options.recommended_rank, ...
-    options.max_rank, options.rank_ratio);
-if any(strcmp(printed_keys, key))
-    return;
-end
-printed_keys{end + 1} = key;
-
-fprintf(['\nISDF rank: rank = %d, recommended = ' ...
-    'ceil(sqrt(%d*%d)*%.3g) = %d\n'], ...
-    options.rank, nleft, nright, options.rank_ratio, ...
-    options.recommended_rank);
+isdf.report_rank(options, ngrid, nleft, nright);
 end

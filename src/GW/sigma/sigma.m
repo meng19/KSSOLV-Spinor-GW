@@ -1,5 +1,7 @@
 function sig = sigma(eps, sig, sys, options, syms)
 sig = sigma_set_defaults(sig);
+isdf.report_rank('reset');
+gw_section_banner('sigma', 'start');
 gw_timer('reset');
 gw_timer('start', 'Sigma total');
 ctx = sigma_context(eps, sig, sys, options, syms);
@@ -146,33 +148,33 @@ for ispin = 1 : nspin
                 
                 n_index = in - ndiag_min + 1;
                 if sig.freq_dep == 0
-                    asx(n_index,ik,ispin) = sigma_gather_if_gpu(asxtemp);
-                    ax(n_index,ik,ispin) = sigma_gather_if_gpu(axtemp);
+                    asx(n_index,ik,ispin) = gw_gather_if_gpu(asxtemp);
+                    ax(n_index,ik,ispin) = gw_gather_if_gpu(axtemp);
                     ach(n_index,ik,ispin) = ...
-                        0.5 * sigma_gather_if_gpu(achtemp);
+                        0.5 * gw_gather_if_gpu(achtemp);
                     if sig.exact_static_ch
                         achx(n_index,ik,ispin) = ...
-                            0.5 * sigma_gather_if_gpu(achxtemp);
+                            0.5 * gw_gather_if_gpu(achxtemp);
                     end
                 elseif sig.freq_dep == 2
                     asx(n_index,ik,ispin) = ...
-                        sigma_gather_if_gpu(asxtemp(contribution.iw_lda));
+                        gw_gather_if_gpu(asxtemp(contribution.iw_lda));
                     asx_freq{n_index,ik,ispin} = ...
-                        sigma_gather_if_gpu(asxtemp);
-                    ax(n_index,ik,ispin) = sigma_gather_if_gpu(axtemp);
+                        gw_gather_if_gpu(asxtemp);
+                    ax(n_index,ik,ispin) = gw_gather_if_gpu(axtemp);
                     ach(n_index,ik,ispin) = ...
-                        sigma_gather_if_gpu(achtemp(contribution.iw_lda));
+                        gw_gather_if_gpu(achtemp(contribution.iw_lda));
                     ach_freq{n_index,ik,ispin} = ...
-                        sigma_gather_if_gpu(achtemp);
+                        gw_gather_if_gpu(achtemp);
                     if sig.exact_static_ch
                         achx(n_index,ik,ispin) = ...
-                            sigma_gather_if_gpu(achxtemp);
+                            gw_gather_if_gpu(achxtemp);
                     end
                 end
                 current_sigma_work = current_sigma_work + ...
                     sigma_block_work;
                 print_progress(current_sigma_work, total_sigma_work, ...
-                    'Message', sprintf('S b%d i%d q%d done', ...
+                    'Message', sprintf('S b%d k%d q%d complete', ...
                     in, ik, iq), ...
                     'Task', sigma_task, ...
                     'PercentStep', progress_percent_step, ...
@@ -213,6 +215,7 @@ sig.achx = real(achx) * ryd;
 fprintf('\nCalculation completed.\n');
 gw_timer('stop', 'Sigma total');
 gw_timer('report', 'Sigma timing information');
+gw_section_banner('sigma', 'end');
 if strcmp(ctx.method, 'reduced_basis') || strcmp(ctx.method, 'matrix_elements')
     sigma_isdf_component_cache('reset');
 end

@@ -1,5 +1,5 @@
 function [products, weight] = component_products( ...
-    left, right, grid_indices, projection)
+    left, right, grid_indices, projection, sample_precision)
 %COMPONENT_PRODUCTS Build or project sum_s conj(left_s).*right_s products.
 
 if ~iscell(left)
@@ -37,6 +37,9 @@ end
 if nargin < 4
     projection = [];
 end
+if nargin < 5 || isempty(sample_precision)
+    sample_precision = 'double';
+end
 if isa(left{1}, 'gpuArray') && ~isempty(projection) && ...
         ~isa(projection, 'gpuArray')
     projection = gpuArray(projection);
@@ -62,8 +65,12 @@ else
              'left-right band pairs.']);
     end
     nprojection = size(projection, 2);
+    product_reference = left{1}(1);
+    if strcmpi(sample_precision, 'single')
+        product_reference = single(product_reference);
+    end
     products = complex(zeros(numel(grid_indices), nprojection, ...
-        'like', left{1}));
+        'like', product_reference));
     ngrid_selected = numel(grid_indices);
     % Batch projection columns so that each component uses one BLAS GEMM
     % instead of one GEMM per projection.  Limit the Ngrid-by-Nright-by-Nb
@@ -74,6 +81,10 @@ else
     for icomponent = 1:numel(left)
         left_values = left{icomponent}(grid_indices, :);
         right_values = right{icomponent}(grid_indices, :);
+        if strcmpi(sample_precision, 'single')
+            left_values = single(left_values);
+            right_values = single(right_values);
+        end
         for first_projection = 1:projection_block_size:nprojection
             last_projection = min(nprojection, ...
                 first_projection + projection_block_size - 1);

@@ -37,20 +37,20 @@ if ctx.sig.freq_dep == 2
     omega = [];
     iw_lda = [];
 end
-progress_work = local_progress_work(block);
+progress_work = gw_block_work(block, 1);
 if ctx.sig.freq_dep == 0
     gw_timer('start', 'Sigma static contraction');
     [asx_loc, ax_loc, ach_loc] = local_static_batch_contract( ...
         ctx, block, matrix_elements, kernel(:, :, 1));
     gw_timer('stop', 'Sigma static contraction');
-    sigma_progress(block, progress_work, ...
-        sprintf('S b%d i%d q%d batch %d/%d', ...
-        block.in, block.ik, block.iq, ctx.nbands, ctx.nbands));
+    gw_block_progress(block, progress_work, ...
+        sprintf('S b%d k%d q%d static: all %d sum bands', ...
+        block.in, block.ik, block.iq, ctx.nbands));
 else
 for nn = 1:ctx.nbands
     aqs = matrix_elements.gme(:, nn);
     if block.occ_kq(nn) > 0
-        aqs_exchange = local_exchange_matrix_element(matrix_elements, nn, aqs);
+        aqs_exchange = sigma_exchange_matrix_element(matrix_elements, nn, aqs);
         ax_loc = ax_loc - block.occ_kq(nn) * ctx.fact * ...
             sum(abs(aqs_exchange).^2 .* block.coulg);
     end
@@ -75,7 +75,7 @@ for nn = 1:ctx.nbands
             block.occ_kq(nn), ctx.options.ev, block.ispin, ...
             coeff, coeff, ctx.fact * kernel, ctx.sig);
     end
-    sigma_progress(block, progress_work * (0.5 + 0.5 * nn / ctx.nbands), ...
+    gw_block_progress(block, progress_work * (0.5 + 0.5 * nn / ctx.nbands), ...
         sprintf('S b%d i%d q%d n%d/%d', ...
         block.in, block.ik, block.iq, nn, ctx.nbands));
 end
@@ -146,31 +146,5 @@ if isfield(matrix_elements, 'coeff')
     coeff = matrix_elements.coeff;
 else
     coeff = matrix_elements.space.product_mu(:, 1:nbands);
-end
-end
-
-function aqs = local_exchange_matrix_element(matrix_elements, nn, fallback)
-if isfield(matrix_elements, 'gme_exchange') && ...
-        ~isempty(matrix_elements.gme_exchange)
-    exchange = matrix_elements.gme_exchange;
-    if isstruct(exchange)
-        index = find(exchange.bands == nn, 1);
-        if ~isempty(index)
-            aqs = exchange.values(:, index);
-            return;
-        end
-    else
-        aqs = exchange(:, nn);
-        return;
-    end
-end
-aqs = fallback;
-end
-
-function work = local_progress_work(block)
-if isfield(block, 'progress') && isfield(block.progress, 'block_work')
-    work = block.progress.block_work;
-else
-    work = 1;
 end
 end

@@ -46,8 +46,9 @@ switch lower(options.sample_method)
                 projection = projection + 1i * ...
                     randn_like(npairs, projection_rank, left{1});
             end
+            projection = sample_cast(projection, options);
             compressed_products = component_products( ...
-                left, right, [], projection);
+                left, right, [], projection, options.sample_precision);
             ind_mu = qrcp_sample(compressed_products, options.rank);
         end
     case 'kmeans'
@@ -72,11 +73,14 @@ max_rank = min(max(options.rank, options.adaptive_rank_max), npairs);
 train_rank = min(npairs, max(max_rank, ...
     ceil(options.random_oversampling * max_rank)));
 validation_rank = min(npairs, options.adaptive_validation_rank);
-train_projection = local_projection(npairs, train_rank, left, right);
-validation_projection = local_projection(npairs, validation_rank, left, right);
-train_products = component_products(left, right, [], train_projection);
+train_projection = local_projection( ...
+    npairs, train_rank, left, right, options);
+validation_projection = local_projection( ...
+    npairs, validation_rank, left, right, options);
+train_products = component_products( ...
+    left, right, [], train_projection, options.sample_precision);
 validation_products = component_products( ...
-    left, right, [], validation_projection);
+    left, right, [], validation_projection, options.sample_precision);
 all_pivots = qrcp_sample(train_products, max_rank);
 validation_norm = gather_if_gpu(norm(validation_products, 'fro'));
 
@@ -108,13 +112,14 @@ state = local_adaptive_state(initial_rank, rank_mu, residual, options, ...
     true, zeta, solve_info, 'randomized_validation');
 end
 
-function projection = local_projection(npairs, ncolumns, left, right)
+function projection = local_projection(npairs, ncolumns, left, right, options)
 projection = randn_like(npairs, ncolumns, left{1});
 has_complex = any(cellfun(@(x) ~isreal(x), left)) || ...
     any(cellfun(@(x) ~isreal(x), right));
 if has_complex
     projection = projection + 1i * randn_like(npairs, ncolumns, left{1});
 end
+projection = sample_cast(projection, options);
 end
 end
 

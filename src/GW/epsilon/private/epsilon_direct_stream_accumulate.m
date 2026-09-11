@@ -3,7 +3,8 @@ function acc = epsilon_direct_stream_accumulate(ctx, acc, block)
 
 npairs = max(1, numel(block.valence_bands) * ...
     numel(block.conduction_bands));
-progress_work = local_progress_work(block);
+progress_work = gw_block_work(block, max(1, ...
+    numel(block.valence_bands) * numel(block.conduction_bands)));
 pair_count = 0;
 for iv_local = 1:numel(block.valence_bands)
     iv = block.valence_bands(iv_local);
@@ -21,18 +22,9 @@ for iv_local = 1:numel(block.valence_bands)
         acc.chi0 = epsilon_add_state_batch( ...
             acc.chi0, vector, eden_pages, block.g_maps);
         pair_count = pair_count + 1;
-        epsilon_progress(block, progress_work * pair_count / npairs, ...
+        gw_block_progress(block, progress_work * pair_count / npairs, ...
             sprintf('E q%d i%d p%d/%d v%d c%d', ...
             block.iq, block.ik, pair_count, npairs, iv, ic));
     end
-end
-end
-
-function work = local_progress_work(block)
-if isfield(block, 'progress') && isfield(block.progress, 'block_work')
-    work = block.progress.block_work;
-else
-    work = max(1, numel(block.valence_bands) * ...
-        numel(block.conduction_bands));
 end
 end
