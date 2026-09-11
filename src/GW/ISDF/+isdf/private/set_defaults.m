@@ -85,6 +85,15 @@ if ~any(strcmp(options.sample_precision, {'double', 'single'}))
         'sample_precision must be ''double'' or ''single'' (got ''%s'').', ...
         options.sample_precision);
 end
+if ~isfield(options, 'projection_block_elements') || ...
+        isempty(options.projection_block_elements)
+    options.projection_block_elements = 2e6;
+end
+if ~(isscalar(options.projection_block_elements) && ...
+        options.projection_block_elements >= 1)
+    error('ISDF:ProjectionBlockElements', ...
+        'projection_block_elements must be a positive scalar.');
+end
 if ~isfield(options, 'interpolation_solver') || isempty(options.interpolation_solver)
     options.interpolation_solver = 'direct';
 end

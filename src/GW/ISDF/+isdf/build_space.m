@@ -37,7 +37,8 @@ if adaptive_state.enabled
 end
 local_print_rank(options, ngrid, nleft, nright);
 if isempty(products)
-    product_mu = component_products(left, right, ind_mu, []);
+    product_mu = component_products(left, right, ind_mu, [], ...
+        options.sample_precision, options.projection_block_elements);
 else
     product_mu = products(ind_mu, :);
 end

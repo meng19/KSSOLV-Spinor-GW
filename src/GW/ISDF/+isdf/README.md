@@ -24,7 +24,8 @@ Sampling:
 
 - `sample_points.m`: dispatch by `sample_method`.
 - `qrcp_sample.m`: QRCP point selection.
-- `scalar_randomized_sample.m`: randomized QRCP for scalar products.
+- `randomized_sample.m`: separable randomized QRCP for scalar and spinor
+  component products.
 - `kmeans_sample.m`, `kmeanspp_init.m`, `grid_points.m`,
   `distance_to_centers.m`: weighted K-means selection.
 - `weighted_sample.m`, `weighted_one.m`, `unique_fill.m`: sampling repair

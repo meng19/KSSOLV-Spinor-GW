@@ -35,35 +35,12 @@ switch lower(options.sample_method)
             local_progress(options, 0.06, 'sampling adaptive randomized QRCP');
             [ind_mu, adaptive_state] = adaptive_randomized_qrcp_sample( ...
                 left, right, options);
-        elseif numel(left) == 1
-            ind_mu = scalar_randomized_sample( ...
-                left{1}, right{1}, options);
         else
-            npairs = size(left{1}, 2) * size(right{1}, 2);
-            projection_rank = max(options.rank, ...
-                ceil(options.random_oversampling * options.rank));
-            projection_rank = min(projection_rank, npairs);
-            projection = randn_like(npairs, projection_rank, left{1});
-            has_complex = any(cellfun(@(x) ~isreal(x), left)) || ...
-                any(cellfun(@(x) ~isreal(x), right));
-            if has_complex
-                projection = projection + 1i * ...
-                    randn_like(npairs, projection_rank, left{1});
-            end
-            projection = sample_cast(projection, options);
-            local_progress(options, 0.10, 'sampling randomized projection');
-            compressed_products = component_products( ...
-                left, right, [], projection, options.sample_precision);
-            local_progress(options, 0.28, 'sampling QRCP');
-            ind_mu = qrcp_sample(compressed_products, options.rank);
+            ind_mu = randomized_sample(left, right, options);
         end
     case 'kmeans'
         local_progress(options, 0.06, 'sampling weights');
-        if numel(left) == 1
-            weight = scalar_weight(left{1}, right{1}, options);
-        else
-            weight = component_weight(left, right, options);
-        end
+        weight = component_weight(left, right, options);
         local_progress(options, 0.28, 'sampling kmeans');
         ind_mu = kmeans_sample(weight, options);
     otherwise
@@ -92,9 +69,11 @@ train_projection = local_projection( ...
 validation_projection = local_projection( ...
     npairs, validation_rank, left, right, options);
 train_products = component_products( ...
-    left, right, [], train_projection, options.sample_precision);
+    left, right, [], train_projection, options.sample_precision, ...
+    options.projection_block_elements);
 validation_products = component_products( ...
-    left, right, [], validation_projection, options.sample_precision);
+    left, right, [], validation_projection, options.sample_precision, ...
+    options.projection_block_elements);
 all_pivots = qrcp_sample(train_products, max_rank);
 validation_norm = gather_if_gpu(norm(validation_products, 'fro'));
 

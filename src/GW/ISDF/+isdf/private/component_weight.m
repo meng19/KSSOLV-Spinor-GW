@@ -4,9 +4,24 @@ function weight = component_weight(left, right, options)
 if nargin < 3 || isempty(options)
     options = struct();
 end
-if ~isfield(options, 'weight_was_set') || ~options.weight_was_set
-    options.weight = 'prod';
-elseif ~isfield(options, 'weight') || isempty(options.weight)
+if ~iscell(left)
+    left = {left};
+end
+if ~iscell(right)
+    right = {right};
+end
+if numel(left) ~= numel(right)
+    error('ISDF:ComponentMismatch', ...
+        'Left and right component counts must match.');
+end
+% Preserve the historical K-means defaults: the scalar path used the
+% configured default ('add'), whereas an implicit multi-component weight
+% used the product norm.  Explicit user choices always take precedence.
+if ~isfield(options, 'weight') || isempty(options)
+    options.weight = 'add';
+end
+if (~isfield(options, 'weight_was_set') || ~options.weight_was_set) && ...
+        numel(left) > 1
     options.weight = 'prod';
 end
 
