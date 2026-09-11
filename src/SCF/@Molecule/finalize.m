@@ -99,11 +99,14 @@ if isempty(mol.lsda)
     mol.lsda = (mol.nspin == 2);
 end
 
-if isempty(mol.ppvar)
-    mol.ppvar = PpVariable(mol);
-end
-
 if isempty(mol.nel)
+    % QE-GW imports provide the electron count explicitly.  Do not parse a
+    % default pseudopotential merely to populate ppvar in that case: GW uses
+    % the QE wavefunctions/density and does not need pseudopotential data.
+    % Keep the original SCF behaviour when nel must be inferred.
+    if isempty(mol.ppvar)
+        mol.ppvar = PpVariable(mol);
+    end
     mol.nel = sum(mol.natoms.*[mol.ppvar.venums]);
 end
 

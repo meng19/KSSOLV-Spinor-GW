@@ -21,14 +21,18 @@ end
 
 switch lower(options.sample_method)
     case 'qrcp'
+        local_progress(options, 0.06, 'sampling full products');
         products = component_products(left, right, [], []);
         if options.adaptive_rank_enable
+            local_progress(options, 0.28, 'sampling adaptive QRCP');
             [ind_mu, adaptive_state] = adaptive_qrcp_sample(products, options);
         else
+            local_progress(options, 0.28, 'sampling QRCP');
             ind_mu = qrcp_sample(products, options.rank);
         end
     case {'qrcp_randomized', 'randomized_qrcp', 'default'}
         if options.adaptive_rank_enable
+            local_progress(options, 0.06, 'sampling adaptive randomized QRCP');
             [ind_mu, adaptive_state] = adaptive_randomized_qrcp_sample( ...
                 left, right, options);
         elseif numel(left) == 1
@@ -47,21 +51,31 @@ switch lower(options.sample_method)
                     randn_like(npairs, projection_rank, left{1});
             end
             projection = sample_cast(projection, options);
+            local_progress(options, 0.10, 'sampling randomized projection');
             compressed_products = component_products( ...
                 left, right, [], projection, options.sample_precision);
+            local_progress(options, 0.28, 'sampling QRCP');
             ind_mu = qrcp_sample(compressed_products, options.rank);
         end
     case 'kmeans'
+        local_progress(options, 0.06, 'sampling weights');
         if numel(left) == 1
             weight = scalar_weight(left{1}, right{1}, options);
         else
             weight = component_weight(left, right, options);
         end
+        local_progress(options, 0.28, 'sampling kmeans');
         ind_mu = kmeans_sample(weight, options);
     otherwise
         error('ISDF:UnknownSampleMethod', ...
             ['Unknown ISDF sample_method "%s". Supported methods: qrcp, ' ...
              'qrcp_randomized, kmeans, default.'], options.sample_method);
+end
+
+function local_progress(options, fraction, stage)
+if isfield(options, 'progress') && isa(options.progress, 'function_handle')
+    options.progress(fraction, stage);
+end
 end
 
 function [ind_mu, state] = adaptive_randomized_qrcp_sample( ...
