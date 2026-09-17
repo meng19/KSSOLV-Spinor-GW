@@ -1,4 +1,4 @@
-function ind_mu = randomized_sample(left, right, options)
+function ind_mu = randomized_sample(left, right, options, qrcp_method)
 %RANDOMIZED_SAMPLE Select ISDF points from a separable random product sketch.
 %
 % The same left/right random projections are used for every spinor
@@ -6,6 +6,9 @@ function ind_mu = randomized_sample(left, right, options)
 % sum_s conj(left_s).*right_s without materializing a dense
 % (nleft*nright)-by-nprojection projection matrix.
 
+if nargin < 4
+    qrcp_method = 'full';
+end
 if ~iscell(left)
     left = {left};
 end
@@ -66,7 +69,11 @@ for icomponent = 1:numel(left)
     end
 end
 local_progress(options, 0.30, 'sampling QRCP');
-ind_mu = qrcp_sample(products, rank_mu);
+if strcmp(qrcp_method, 'mex')
+    ind_mu = partial_qrcp_mex_sample(products, rank_mu);
+else
+    ind_mu = qrcp_sample(products, rank_mu);
+end
 end
 
 function local_product_progress(options, icomponent, ncomponents, current, total)
@@ -81,4 +88,5 @@ function local_progress(options, fraction, stage)
 if isfield(options, 'progress') && isa(options.progress, 'function_handle')
     options.progress(fraction, stage);
 end
+
 end

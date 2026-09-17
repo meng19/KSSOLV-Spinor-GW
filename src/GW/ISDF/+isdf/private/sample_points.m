@@ -38,6 +38,12 @@ switch lower(options.sample_method)
         else
             ind_mu = randomized_sample(left, right, options);
         end
+    case {'partial_qrcp_randomized_mex', 'qrcp_randomized_partial_mex'}
+        if options.adaptive_rank_enable
+            error('ISDF:AdaptivePartialQRCP', ...
+                'Adaptive rank selection is not supported with partial QRCP.');
+        end
+        ind_mu = randomized_sample(left, right, options, 'mex');
     case 'kmeans'
         local_progress(options, 0.06, 'sampling weights');
         weight = component_weight(left, right, options);
@@ -46,7 +52,8 @@ switch lower(options.sample_method)
     otherwise
         error('ISDF:UnknownSampleMethod', ...
             ['Unknown ISDF sample_method "%s". Supported methods: qrcp, ' ...
-             'qrcp_randomized, kmeans, default.'], options.sample_method);
+             'qrcp_randomized, partial_qrcp_randomized_mex, ' ...
+             'kmeans, default.'], options.sample_method);
 end
 
 function local_progress(options, fraction, stage)
