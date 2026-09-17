@@ -161,6 +161,7 @@ matlab -wait -batch "run('test/ISDF/unit/test_ISDF_component_product_space.m')"
 matlab -wait -batch "run('test/ISDF/unit/test_ISDF_indices_methods.m')"
 matlab -wait -batch "run('test/ISDF/unit/test_ISDF_package_api.m')"
 matlab -wait -batch "run('test/ISDF/unit/test_ISDF_reduced_polarizability.m')"
+matlab -wait -batch "run('test/ISDF/unit/test_ISDF_screened_kernel_cache.m')"
 ```
 
 涉及 GPU helper 时再补：

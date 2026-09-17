@@ -219,12 +219,24 @@ Sigma has further product-space reuse controls:
 | `global_vn_space` | `false` | Analogous reuse for the VN exchange space.  It only matters when a separate VN space is actually used. |
 | `reuse_eps_real_wfn` | `false` | Reuse epsilon's cached real-space wavefunctions in sigma.  Set it together with `epsilon.isdf.cache_real_wfn=true`; it saves FFT construction at the cost of retaining the cache. |
 | `cache_real_wfn` | `false` (epsilon) | Retain epsilon real-space wavefunction components so sigma can reuse them.  Helpful when epsilon and sigma use compatible FFT grids; consumes memory. |
+| `screened_kernel_cache_bytes` | `Inf` | Byte budget for reusing a projected reduced screened kernel across the diagonal bands that share one target product space.  Reuse pays off with `global_nn_space=true`; the exact static CH matrix depends only on q and is reused regardless.  `Inf` (default) keeps every reusable kernel without a memory cap; entries are never evicted, so set a finite byte cap — or `0` to disable reuse — when memory is tight.
 
 The progress text reflects these choices: `VC`, `NN`, and `VN` name the
 product spaces; `NN built: 32 diag / 319 sum` means an NN space was
 constructed for 32 requested diagonal bands and 319 summation bands; `NN
 reused` means the previously built global NN space was reused.  It is
 unrelated to `reuse_nn_for_vn`.
+
+`screened_kernel_cache_bytes` covers the third setup cost of a reduced-basis
+sigma run: projecting the reduced screened interaction onto a target product
+space.  With `global_nn_space=true` one projection serves every requested
+diagonal band, so the run builds it once per k/q instead of once per band; the
+exact static CH matrix is q-only and is reused in either mode.  The
+`Sigma screened kernel` row of the timing report counts those projections and
+shows the miss cost in `CPU max`, and the run ends with an
+`ISDF screened-kernel cache: ...` summary line.  Per-band NN spaces
+(`global_nn_space=false`) cannot share a projection, so the budget only helps
+when a global space or the exact CH term is used.
 
 ### Recommended starting points
 
@@ -241,7 +253,10 @@ unrelated to `reuse_nn_for_vn`.
    double-precision production case before trusting it.
 4. **Many QP bands:** enable `global_nn_space`; if using a distinct VN exchange
    space, also enable `global_vn_space`.  Monitor memory, since the global
-   spaces retain all requested diagonal bands together.
+   spaces retain all requested diagonal bands together.  The global space also
+   lets `screened_kernel_cache_bytes` (default `Inf`, unlimited) replace
+   `ndiag - 1` repeated screened projections per k/q by one; set a finite
+   budget there if the retained kernels grow too large.
 5. **Diagnosing a discrepancy:** set `reduced_solver="direct"`, keep
    `sample_precision="double"`, use a fixed seed, and compare one product
    space/rank at a time against the direct calculation.  Avoid simultaneously

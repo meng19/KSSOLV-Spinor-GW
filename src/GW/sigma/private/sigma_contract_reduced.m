@@ -16,10 +16,8 @@ if size(block.screened_w.zeta_g, 1) ~= block.n_cutoff
         'Reduced screened interaction does not match sigma cutoff.');
 end
 
-target_zeta = matrix_elements.space.zeta_g(1:block.n_cutoff, :);
 gw_timer('start', 'Sigma screened kernel');
-kernel = isdf.screened_kernel( ...
-    block.screened_w, target_zeta, block.coulg_cutoff);
+kernel = local_target_kernel(ctx, block, matrix_elements);
 gw_timer('stop', 'Sigma screened kernel');
 asx_loc = 0;
 ax_loc = 0;
@@ -83,8 +81,9 @@ end
 
 achx_loc = 0;
 if ctx.sig.exact_static_ch
-    screened_matrix = ctx.fact * isdf.screened_kernel( ...
-        block.screened_w, [], block.coulg_cutoff);
+    gw_timer('start', 'Sigma screened kernel');
+    screened_matrix = ctx.fact * local_full_kernel(ctx, block);
+    gw_timer('stop', 'Sigma screened kernel');
     kdata = ctx.kdata{block.ik};
     exact_ch = sigma_cohsex_exact_ch(block.in, block.ispin, ...
         ctx.fbz, kdata.indrk, block.iq, block.aqsch, ...
@@ -147,4 +146,58 @@ if isfield(matrix_elements, 'coeff')
 else
     coeff = matrix_elements.space.product_mu(:, 1:nbands);
 end
+end
+
+function kernel = local_target_kernel(ctx, block, matrix_elements)
+% Project the reduced screened interaction onto this block's target product
+% space.  The projection depends only on (k, q, target space), so every
+% diagonal band that shares one space reuses a single cached kernel.
+
+target_zeta = matrix_elements.space.zeta_g(1:block.n_cutoff, :);
+kernel = isdf.screened_kernel(block.screened_w, target_zeta, ...
+    block.coulg_cutoff, local_kernel_key(ctx, block, 'target', ...
+    local_space_key(matrix_elements)));
+end
+
+function kernel = local_full_kernel(ctx, block)
+% q-only projection used by the exact static Coulomb-hole reference.
+
+kernel = isdf.screened_kernel(block.screened_w, [], block.coulg_cutoff, ...
+    local_kernel_key(ctx, block, 'full', ''));
+end
+
+function key = local_space_key(matrix_elements)
+key = '';
+if isstruct(matrix_elements) && isfield(matrix_elements, 'space_key') && ...
+        ischar(matrix_elements.space_key)
+    key = matrix_elements.space_key;
+end
+end
+
+function key = local_kernel_key(ctx, block, kind, space_key)
+% Reuse is safe only when the caller can name the target product space and
+% the configured byte budget is positive; otherwise return '' so that the
+% kernel is recomputed per block.
+
+key = '';
+if strcmp(kind, 'target') && isempty(space_key)
+    return;
+end
+if ~isfield(ctx.sig.isdf, 'screened_kernel_cache_bytes')
+    return;
+end
+budget = ctx.sig.isdf.screened_kernel_cache_bytes;
+if ~(isnumeric(budget) && isscalar(budget) && budget > 0)
+    return;
+end
+
+% The key must distinguish every input of ISDF.SCREENED_KERNEL: the target
+% space (space_key), the full-BZ q-point that fixes screened_w and the
+% cutoff-limited Coulomb vector (iq_fbz, n_cutoff), the reduced dimensions
+% and the CPU/GPU kind of the stored arrays.
+zeta_g = block.screened_w.zeta_g;
+k_mu = block.screened_w.k_mu;
+key = sprintf('%s|%s|q%d|n%d|v%d|m%d|p%d|g%d', kind, space_key, ...
+    block.iq_fbz, block.n_cutoff, size(zeta_g, 2), size(k_mu, 1), ...
+    size(k_mu, 3), double(isa(zeta_g, 'gpuArray')));
 end

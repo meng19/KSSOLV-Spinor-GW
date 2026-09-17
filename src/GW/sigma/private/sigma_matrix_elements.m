@@ -38,6 +38,14 @@ if use_isdf
             block.in, block.ik, block.iq, ctx.nbands, ctx.nbands));
         matrix_elements.gme = gme;
         matrix_elements.space = space;
+        if isempty(space)
+            matrix_elements.space_key = '';
+        else
+            % Identifies the per-band target product space.  Only an
+            % identical space may reuse one projected screened kernel.
+            matrix_elements.space_key = sprintf('nn-space-k%d-q%d-s%d-b%d', ...
+                block.ik, block.iq, block.ispin, block.in);
+        end
     end
     if local_uses_vn_exchange(ctx)
         matrix_elements.gme_exchange = local_vn_matrix_elements( ...
@@ -63,6 +71,7 @@ for nn = 1:ctx.nbands
 end
 matrix_elements.gme = gme;
 matrix_elements.space = [];
+matrix_elements.space_key = '';
 end
 
 function matrix_elements = local_global_nn_matrix_elements( ...
@@ -107,6 +116,7 @@ end
 matrix_elements.gme = reshape(entry.gme_all(:, left_index, :), ...
     numel(block.idx.q), ctx.nbands);
 matrix_elements.space = entry.space;
+matrix_elements.space_key = key;
 % product_mu is ordered as (left band, right band).  Unlike gme_all, it
 % is not reshaped above, so retain the coefficients for this target band
 % explicitly for the reduced screened-interaction contraction.

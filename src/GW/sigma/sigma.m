@@ -1,11 +1,14 @@
 function sig = sigma(eps, sig, sys, options, syms)
 sig = sigma_set_defaults(sig);
 isdf.report_rank('reset');
+isdf.screened_kernel_cache('reset');
 gw_section_banner('sigma', 'start');
 gw_timer('reset');
 gw_timer('start', 'Sigma total');
 ctx = sigma_context(eps, sig, sys, options, syms);
 sig = ctx.sig;
+isdf.screened_kernel_cache('limit', ...
+    ctx.sig.isdf.screened_kernel_cache_bytes);
 ryd = ctx.ryd;
 nbands = ctx.nbands;
 ndiag_min = ctx.band_range(1);
@@ -220,8 +223,21 @@ sig.achx = real(achx) * ryd;
 fprintf('\nCalculation completed.\n');
 gw_timer('stop', 'Sigma total');
 gw_timer('report', 'Sigma timing information');
+cache_info = isdf.screened_kernel_cache('stats');
+if cache_info.limit > 0
+    if isinf(cache_info.limit)
+        limit_text = 'unlimited';
+    else
+        limit_text = sprintf('%.1f MB', cache_info.limit / 1e6);
+    end
+    fprintf(['ISDF screened-kernel cache: %d hit(s), %d miss(es), ' ...
+        '%d entry(ies), %.1f MB of %s used\n'], cache_info.hits, ...
+        cache_info.misses, cache_info.stored, cache_info.bytes / 1e6, ...
+        limit_text);
+end
 gw_section_banner('sigma', 'end');
 if strcmp(ctx.method, 'reduced_basis') || strcmp(ctx.method, 'matrix_elements')
     sigma_isdf_component_cache('reset');
 end
+isdf.screened_kernel_cache('reset');
 end

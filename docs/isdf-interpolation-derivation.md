@@ -1032,6 +1032,8 @@ $$
 
 共轭和转置的具体位置来自当前代码对矩阵元 `aqs` 的约定；核心结构是把完整 \(G\)-space 的 \(W_1\) 投影成目标 ISDF 空间中的小矩阵。
 
+这三步的代价是 \(O(n_\mu^{t} n_\mu^{vc} N_G + n_\mu^{t} n_\mu^{vc\,2} + n_\mu^{t\,2} n_\mu^{vc})\)，其中 \(N_G\) 是 cutoff 内的 \(G\) 数。投影只依赖 \((k,q)\) 与目标乘积空间 \(Z_{tn}\)，与对角带号 \(n\) 无关；当 `sig.isdf.global_nn_space=true` 时多个对角带共享同一个 \(Z_{tn}\)，而 `exact_static_ch` 使用的完整矩阵完全不依赖 \(Z_{tn}\)。代码因此把 `screened_kernel` 的结果存进 `isdf.screened_kernel_cache`（预算由 `sig.isdf.screened_kernel_cache_bytes` 控制），每个 \(Z_{tn}\) 只投影一次，命中时直接复用，数值上与原路径逐位一致。
+
 ### 13.2 对单个能带的 reduced 收缩
 
 目标乘积态在插值点上的系数为

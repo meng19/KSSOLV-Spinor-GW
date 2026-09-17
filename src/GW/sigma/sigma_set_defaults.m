@@ -92,4 +92,18 @@ end
 if ~isfield(sig.isdf, 'cauchy_MaxIter') || isempty(sig.isdf.cauchy_MaxIter)
     sig.isdf.cauchy_MaxIter = 12;
 end
+if ~isfield(sig.isdf, 'screened_kernel_cache_bytes') || ...
+        isempty(sig.isdf.screened_kernel_cache_bytes)
+    % Byte budget for reusing reduced screened kernels that several
+    % diagonal bands share.  Inf keeps every reusable kernel (no memory
+    % cap); a non-positive value disables the reuse.
+    sig.isdf.screened_kernel_cache_bytes = Inf;
+end
+if ~(isnumeric(sig.isdf.screened_kernel_cache_bytes) && ...
+        isscalar(sig.isdf.screened_kernel_cache_bytes) && ...
+        sig.isdf.screened_kernel_cache_bytes >= 0)
+    error('ISDF:ScreenedKernelCacheLimit', ...
+        ['sig.isdf.screened_kernel_cache_bytes must be a ' ...
+         'non-negative scalar or Inf.']);
+end
 end
