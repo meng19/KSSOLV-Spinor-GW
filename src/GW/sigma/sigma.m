@@ -7,8 +7,12 @@ gw_timer('reset');
 gw_timer('start', 'Sigma total');
 ctx = sigma_context(eps, sig, sys, options, syms);
 sig = ctx.sig;
-isdf.screened_kernel_cache('limit', ...
-    ctx.sig.isdf.screened_kernel_cache_bytes);
+cache_budget_gb = ctx.sig.isdf.screened_kernel_cache_gb;
+cache_budget_bytes = cache_budget_gb * (1024^3);
+if isinf(cache_budget_bytes)
+    cache_budget_bytes = Inf;
+end
+isdf.screened_kernel_cache('limit', cache_budget_bytes);
 ryd = ctx.ryd;
 nbands = ctx.nbands;
 ndiag_min = ctx.band_range(1);

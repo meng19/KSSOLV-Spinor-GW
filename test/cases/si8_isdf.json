@@ -16,7 +16,7 @@
       "enable": true,
       "algorithm": "reduced_basis",
       "output": "screened_w",
-      "sample_method": "kmeans",
+      "sample_method": "qrcp_randomized",
       "sample_precision": "double",
       "interpolation_solver": "svd_whiten",
       "svd_cutoff": 1e-12,
@@ -41,7 +41,7 @@
     "isdf": {
       "enable": true,
       "algorithm": "reduced_basis",
-      "sample_method": "kmeans",
+      "sample_method": "qrcp_randomized",
       "sample_precision": "double",
       "interpolation_solver": "svd_whiten",
       "svd_cutoff": 1e-12,

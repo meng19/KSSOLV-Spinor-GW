@@ -183,10 +183,13 @@ key = '';
 if strcmp(kind, 'target') && isempty(space_key)
     return;
 end
-if ~isfield(ctx.sig.isdf, 'screened_kernel_cache_bytes')
+if isfield(ctx.sig.isdf, 'screened_kernel_cache_gb')
+    budget = ctx.sig.isdf.screened_kernel_cache_gb;
+elseif isfield(ctx.sig.isdf, 'screened_kernel_cache_bytes')
+    budget = ctx.sig.isdf.screened_kernel_cache_bytes / (1024^3);
+else
     return;
 end
-budget = ctx.sig.isdf.screened_kernel_cache_bytes;
 if ~(isnumeric(budget) && isscalar(budget) && budget > 0)
     return;
 end

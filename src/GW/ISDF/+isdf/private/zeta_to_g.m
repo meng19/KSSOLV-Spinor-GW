@@ -15,6 +15,7 @@ zeta_g = complex(zeros(numel(idx_q), size(zeta_real, 2), ...
     'like', zeta_real));
 for imu = 1:size(zeta_real, 2)
     zeta_grid = reshape(zeta_real(:, imu), fftgrid);
+%     zeta_fft = ifftn(zeta_grid);
     zeta_fft = fftn(zeta_grid) / ngrid;
     zeta_g(:, imu) = zeta_fft(idx_q);
 end
