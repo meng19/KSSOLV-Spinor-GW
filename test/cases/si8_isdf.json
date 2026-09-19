@@ -24,7 +24,9 @@
       "rank_ratio_vc": 12,
       "adaptive_rank_enable": false,
       "seed": 0,
-      "reduced_solver": "cauchy"
+      "reduced_solver": "cauchy",
+      "cauchy_froErr": 1e-6,
+      "cauchy_MaxIter": 10
     }
   },
   "sigma": {
@@ -49,12 +51,11 @@
       "rank_ratio_nn": 16,
       "rank_ratio_vn": 24,
       "exchange_space": "vn",
-      "reuse_nn_for_vn": true,
+      "reuse_nn_for_vn": false,
       "adaptive_rank_enable": false,
       "global_nn_space": true,
       "global_vn_space": true,
-      "seed": 0,
-      "reduced_solver": "cauchy"
+      "seed": 0
     }
   }
 }

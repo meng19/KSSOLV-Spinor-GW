@@ -32,7 +32,7 @@
   "sigma": {
     "nbnd": 48,
     "ndiag_min": 1,
-    "ndiag_max": 2,
+    "ndiag_max": 16,
     "freq_dep": 0,
     "coul_cut": "spherical_truncation",
     "coul_cutoff": 5,
