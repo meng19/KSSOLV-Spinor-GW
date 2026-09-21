@@ -9,9 +9,10 @@ end
 if ~isfield(options, 'warn_rank_selection') || isempty(options.warn_rank_selection)
     options.warn_rank_selection = true;
 end
-recommended_rank = ceil(sqrt(nleft * nright) * options.rank_ratio);
-recommended_rank = min(max(1, recommended_rank), max_rank);
+unclamped_recommended_rank = ceil(sqrt(nleft * nright) * options.rank_ratio);
+recommended_rank = min(max(1, unclamped_recommended_rank), max_rank);
 options.max_rank = max_rank;
+options.unclamped_recommended_rank = unclamped_recommended_rank;
 options.recommended_rank = recommended_rank;
 if ~isfield(options, 'rank') || isempty(options.rank)
     options.rank = recommended_rank;
@@ -55,6 +56,16 @@ end
 if ~isfield(options, 'seed') || isempty(options.seed)
     options.seed = 0;
 end
+if ~isfield(options, 'swap_left_right') || isempty(options.swap_left_right)
+    % Select points from conj(right).*left, then reconstruct the original
+    % conj(left).*right space.  This is a validation control only.
+    options.swap_left_right = false;
+end
+if ~(isscalar(options.swap_left_right) && ...
+        (islogical(options.swap_left_right) || isnumeric(options.swap_left_right)))
+    error('ISDF:SwapLeftRight', 'swap_left_right must be a logical scalar.');
+end
+options.swap_left_right = logical(options.swap_left_right);
 if ~isfield(options, 'rcond_tol') || isempty(options.rcond_tol)
     options.rcond_tol = 1e-12;
 end

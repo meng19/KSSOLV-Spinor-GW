@@ -13,6 +13,11 @@ if ~any(strcmp(product_type, {'vc', 'vn', 'nn'}))
 end
 options.product_type = product_type;
 
+swap_field = ['swap_left_right_' product_type];
+if isfield(options, swap_field) && ~isempty(options.(swap_field))
+    options.swap_left_right = options.(swap_field);
+end
+
 rank_field = ['rank_' product_type];
 ratio_field = ['rank_ratio_' product_type];
 if isfield(options, rank_field) && ~isempty(options.(rank_field))

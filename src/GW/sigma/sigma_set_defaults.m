@@ -70,6 +70,15 @@ end
 if ~isfield(sig.isdf, 'reuse_nn_for_vn') || isempty(sig.isdf.reuse_nn_for_vn)
     sig.isdf.reuse_nn_for_vn = false;
 end
+if ~isfield(sig.isdf, 'validate_hf_exchange') || isempty(sig.isdf.validate_hf_exchange)
+    % Direct FFT validation is deliberately opt-in: it recomputes every
+    % selected occupied product after its ISDF interpolation is built.
+    sig.isdf.validate_hf_exchange = false;
+end
+if ~isfield(sig.isdf, 'validate_hf_exchange_max_pairs') || ...
+        isempty(sig.isdf.validate_hf_exchange_max_pairs)
+    sig.isdf.validate_hf_exchange_max_pairs = Inf;
+end
 if ~isfield(sig.isdf, 'reuse_eps_real_wfn') || isempty(sig.isdf.reuse_eps_real_wfn)
     sig.isdf.reuse_eps_real_wfn = false;
 end

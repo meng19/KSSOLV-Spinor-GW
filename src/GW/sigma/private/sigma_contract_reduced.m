@@ -81,9 +81,9 @@ end
 
 achx_loc = 0;
 if ctx.sig.exact_static_ch
-    gw_timer('start', 'Sigma screened kernel');
+    gw_timer('start', 'Sigma full screened kernel');
     screened_matrix = ctx.fact * local_full_kernel(ctx, block);
-    gw_timer('stop', 'Sigma screened kernel');
+    gw_timer('stop', 'Sigma full screened kernel');
     kdata = ctx.kdata{block.ik};
     exact_ch = sigma_cohsex_exact_ch(block.in, block.ispin, ...
         ctx.fbz, kdata.indrk, block.iq, block.aqsch, ...
@@ -121,9 +121,28 @@ occ = reshape(block.occ_kq, 1, []);
 if isa(screened_values, 'gpuArray') && ~isa(occ, 'gpuArray')
     occ = gpuArray(occ);
 end
-asx_loc = -sum(occ .* screened_values);
+if local_has_vn_screened_exchange(matrix_elements)
+    vn = matrix_elements.gme_exchange;
+    gw_timer('start', 'Sigma VN screened kernel');
+    vn_kernel = local_vn_exchange_kernel(ctx, block, vn);
+    gw_timer('stop', 'Sigma VN screened kernel');
+    vn_kernel_coeff = vn_kernel * conj(vn.coeff);
+    vn_values = ctx.fact * sum(vn.coeff .* vn_kernel_coeff, 1);
+    asx_loc = -sum(occ(vn.bands) .* vn_values);
+else
+    asx_loc = -sum(occ .* screened_values);
+end
 ax_loc = local_batch_exchange(ctx, block, matrix_elements, occ);
 ach_loc = sum(screened_values);
+end
+
+function tf = local_has_vn_screened_exchange(matrix_elements)
+tf = isfield(matrix_elements, 'gme_exchange') && ...
+    isstruct(matrix_elements.gme_exchange) && ...
+    isfield(matrix_elements.gme_exchange, 'space') && ...
+    isfield(matrix_elements.gme_exchange, 'coeff') && ...
+    ~isempty(matrix_elements.gme_exchange.space) && ...
+    ~isempty(matrix_elements.gme_exchange.coeff);
 end
 
 function ax_loc = local_batch_exchange(ctx, block, matrix_elements, occ)
@@ -157,6 +176,16 @@ target_zeta = matrix_elements.space.zeta_g(1:block.n_cutoff, :);
 kernel = isdf.screened_kernel(block.screened_w, target_zeta, ...
     block.coulg_cutoff, local_kernel_key(ctx, block, 'target', ...
     local_space_key(matrix_elements)));
+end
+
+function kernel = local_vn_exchange_kernel(ctx, block, vn)
+% VN analogue of the reference tildeWq_vn.  SCREENED_KERNEL is W-v, so
+% its sign follows the current sigma convention rather than the positive
+% V*K^{-1}*V quantity stored by gen_tildeWq_Gamma.
+target_zeta = vn.space.zeta_g(1:block.n_cutoff, :);
+kernel = isdf.screened_kernel(block.screened_w, target_zeta, ...
+    block.coulg_cutoff, local_kernel_key(ctx, block, 'target', ...
+    vn.space_key));
 end
 
 function kernel = local_full_kernel(ctx, block)

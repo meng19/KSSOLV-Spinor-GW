@@ -21,10 +21,12 @@ if use_isdf
         isdf_options = local_space_options( ...
             ctx, block, 'nn', progress_work, 0.22, 0.45, 'NN');
     if strcmp(ctx.method, 'reduced_basis')
-            gw_timer('start', 'Sigma ISDF space');
+            gw_timer('start', 'Sigma ISDF interpolation');
             space = isdf.build_space(left, right, block.idx.q, ...
                 ctx.grid_size, isdf_options);
-            gw_timer('stop', 'Sigma ISDF space');
+            gw_timer('stop', 'Sigma ISDF interpolation');
+            local_validate_hf_exchange(ctx, block, space, left, right, ...
+                'NN');
             gme = reshape(space.zeta_g * space.product_mu, ...
                 nq, ctx.nbands);
         else
@@ -95,10 +97,13 @@ if ~hit
         error('ISDF:GlobalNNSpaceRequiresReducedBasis', ...
             'global_nn_space requires the reduced_basis ISDF algorithm.');
     end
-    gw_timer('start', 'Sigma ISDF space');
+    gw_timer('start', 'Sigma ISDF interpolation');
     space = isdf.build_space(left, right, block.idx.q, ...
         ctx.grid_size, isdf_options);
-    gw_timer('stop', 'Sigma ISDF space');
+%     space = isdf.build_space(right, left, block.idx.q, ...
+%         ctx.grid_size, isdf_options);
+    gw_timer('stop', 'Sigma ISDF interpolation');
+    local_validate_hf_exchange(ctx, block, space, left, right, 'NN');
     nq = numel(block.idx.q);
     gme_all = reshape(space.zeta_g * space.product_mu, ...
         nq, numel(left_bands), ctx.nbands);
@@ -156,11 +161,13 @@ if ~hit
     isdf_options = local_space_options( ...
         ctx, block, 'vn', progress_work, 0.48, 0.50, 'VN');
     nq = numel(block.idx.q);
+    space = [];
     if strcmp(ctx.method, 'reduced_basis')
-        gw_timer('start', 'Sigma ISDF space');
+        gw_timer('start', 'Sigma ISDF interpolation');
         space = isdf.build_space(left, right, block.idx.q, ...
             ctx.grid_size, isdf_options);
-        gw_timer('stop', 'Sigma ISDF space');
+        gw_timer('stop', 'Sigma ISDF interpolation');
+        local_validate_hf_exchange(ctx, block, space, left, right, 'VN');
         gme_all = reshape(space.zeta_g * space.product_mu, nq, ...
             numel(left_bands), numel(occupied_bands));
     else
@@ -169,7 +176,8 @@ if ~hit
             numel(occupied_bands));
     end
     entry = struct('left_bands', left_bands, ...
-        'occupied_bands', occupied_bands, 'gme_all', gme_all);
+        'occupied_bands', occupied_bands, 'gme_all', gme_all, ...
+        'space', space);
     sigma_isdf_component_cache('put', key, entry);
 end
 
@@ -181,6 +189,14 @@ end
 gme_exchange = struct('bands', entry.occupied_bands, ...
     'values', reshape(entry.gme_all(:, left_index, :), ...
     numel(block.idx.q), []));
+if isfield(entry, 'space') && ~isempty(entry.space)
+    % Retain the VN coefficients and basis so static screened exchange can
+    % use its own projected VC-screened kernel, as in gen_tildeWq_Gamma.
+    gme_exchange.space = entry.space;
+    gme_exchange.coeff = entry.space.product_mu(:, ...
+        left_index:numel(entry.left_bands):end);
+    gme_exchange.space_key = key;
+end
 end
 
 function left = local_left_components(ctx, block, bands, progress)
@@ -277,4 +293,31 @@ if ~any(strcmp(exchange_space, {'nn', 'vn'}))
 end
 tf = strcmp(exchange_space, 'vn') && ...
     ~ctx.sig.isdf.reuse_nn_for_vn;
+end
+
+function local_validate_hf_exchange(ctx, block, space, left, right, label)
+% Validate exactly the bare-exchange products used by this sigma block.
+if ~ctx.sig.isdf.validate_hf_exchange
+    return;
+end
+if strcmp(label, 'NN') && local_uses_vn_exchange(ctx)
+    return;
+end
+weights = repmat(reshape(block.occ_kq(1:size(right{1}, 2)), 1, []), ...
+    size(left{1}, 2), 1);
+weights = weights(:);
+if ~any(weights)
+    return;
+end
+gw_timer('start', 'Sigma ISDF HF validation');
+report = isdf.validate_hf_exchange(space, left, right, block.idx.q, ...
+    ctx.grid_size, block.coulg, weights, ctx.sig.isdf);
+gw_timer('stop', 'Sigma ISDF HF validation');
+fprintf('ISDF %s exchange validation for k%d q%d target b%d\n', ...
+    label, block.ik, block.iq, block.in);
+if isfinite(ctx.sig.isdf.validate_hf_exchange_max_pairs) && ...
+        report.pairs_checked < report.pairs_total
+    fprintf('ISDF HF exchange validation used the first %d occupied pairs.\n', ...
+        report.pairs_checked);
+end
 end

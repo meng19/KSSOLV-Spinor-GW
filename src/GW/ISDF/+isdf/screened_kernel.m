@@ -75,7 +75,7 @@ if build_full_matrix
     end
 else
     left_projector = target_zeta_g.' * ...
-        (epsilon_vcoul .* screened.zeta_g);
+        (contract_vcoul .* screened.zeta_g);
     if isequal(epsilon_vcoul, contract_vcoul) && isreal(epsilon_vcoul)
         right_projector = left_projector';
     else

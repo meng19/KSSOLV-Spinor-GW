@@ -11,6 +11,7 @@ for iband = 1:numel(band_list)
     fft_box = fft_template;
     fft_box(idx) = wfn.psi{ispin, ispinor}(:, band_list(iband));
     band_real = ifftn(fft_box) * ngrid;
+%     band_real = fftn(fft_box);
     values(:, iband) = band_real(:);
     if isa(progress, 'function_handle')
         progress(iband, numel(band_list));

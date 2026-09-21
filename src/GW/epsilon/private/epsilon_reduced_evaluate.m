@@ -19,13 +19,14 @@ isdf_options = isdf.options_for_type(ctx.eps.isdf, 'vc');
 isdf_options.progress = @(fraction, stage) gw_block_progress(block, ...
     progress_work * 0.60 * fraction, ...
     sprintf('E q%d i%d ISDF %s', block.iq, block.ik, stage));
-gw_timer('start', 'Epsilon ISDF space');
+gw_timer('start', 'Epsilon ISDF interpolation');
 space = isdf.build_space(left, right, block.idx.q, ...
     size(block.fft.Nfft1), isdf_options);
-gw_timer('stop', 'Epsilon ISDF space');
+gw_timer('stop', 'Epsilon ISDF interpolation');
 gw_block_progress(block, progress_work * 0.60, ...
     sprintf('E q%d i%d isdf r%d', ...
     block.iq, block.ik, space.rank));
+local_validate_vc_coulomb(ctx, block, space, left, right);
 solver.method = ctx.eps.isdf.reduced_solver;
 solver.froErr = ctx.eps.isdf.cauchy_froErr;
 solver.MaxIter = ctx.eps.isdf.cauchy_MaxIter;
@@ -38,12 +39,46 @@ if isfield(space, 'polar_transform')
     polar.coeff = isdf.transform_polar_coeff( ...
         polar.coeff, space.polar_transform);
 end
+
 gw_timer('stop', 'Epsilon polarizability');
 gw_block_progress(block, progress_work * 0.95, ...
     sprintf('E q%d k%d polar: %d v-c pairs', block.iq, block.ik, ...
     numel(block.valence_bands) * numel(block.conduction_bands)));
 contribution.space = space;
 contribution.polar = polar;
+end
+
+function local_validate_vc_coulomb(ctx, block, space, left, right)
+% Epsilon's VC space has no occupied-occupied products, so validate the
+% same Coulomb quadratic form as HF exchange on its actual VC products.
+if ~ctx.eps.isdf.validate_hf_exchange
+    return;
+end
+weights = repmat(block.occ_vkq(block.valence_bands(:)), 1, ...
+    numel(block.conduction_bands));
+weights = weights(:);
+if ~any(weights)
+    return;
+end
+coulg = coulG_select(ctx.eps, ctx.pol.nmtx(block.iq), ...
+    ctx.pol.isrtx(:, block.iq), ctx.ekin(:, block.iq), 1, ...
+    ctx.pol.mtx{:, block.iq}, ctx.gvec, ctx.sys, block.iq);
+if ctx.use_gpu
+    coulg = gpuArray(coulg);
+end
+validation_options = ctx.eps.isdf;
+validation_options.validate_hf_exchange_label = 'VC Coulomb-product';
+gw_timer('start', 'Epsilon ISDF VC validation');
+report = isdf.validate_hf_exchange(space, left, right, block.idx.q, ...
+    size(block.fft.Nfft1), coulg, weights, validation_options);
+gw_timer('stop', 'Epsilon ISDF VC validation');
+fprintf('ISDF VC interpolation validation for epsilon q%d k%d\n', ...
+    block.iq, block.ik);
+if isfinite(ctx.eps.isdf.validate_hf_exchange_max_pairs) && ...
+        report.pairs_checked < report.pairs_total
+    fprintf('ISDF VC validation used the first %d weighted pairs.\n', ...
+        report.pairs_checked);
+end
 end
 
 function progress = local_progress_slice(block, progress_work, start_frac, end_frac)

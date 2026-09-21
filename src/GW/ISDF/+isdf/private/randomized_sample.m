@@ -33,8 +33,10 @@ right_rank = min(max(1, ceil(sqrt((nright / nleft) * sample_rank))), ...
 local_progress(options, 0.04, 'sampling randomized sketch');
 left_sample = sample_cast(left{1}, options);
 right_sample = sample_cast(right{1}, options);
+
 left_projection = randn_like(nleft, left_rank, left_sample);
 right_projection = randn_like(nright, right_rank, right_sample);
+
 has_complex = any(cellfun(@(values) ~isreal(values), left)) || ...
     any(cellfun(@(values) ~isreal(values), right));
 if 0

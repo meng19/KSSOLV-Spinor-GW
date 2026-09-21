@@ -26,7 +26,8 @@
       "seed": 0,
       "reduced_solver": "cauchy",
       "cauchy_froErr": 1e-6,
-      "cauchy_MaxIter": 10
+      "cauchy_MaxIter": 10,
+      "validate_hf_exchange": true
     }
   },
   "sigma": {
@@ -55,7 +56,8 @@
       "adaptive_rank_enable": false,
       "global_nn_space": true,
       "global_vn_space": true,
-      "seed": 0
+      "seed": 0,
+      "swap_left_right_nn" : true
     }
   }
 }

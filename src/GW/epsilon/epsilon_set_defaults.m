@@ -58,6 +58,15 @@ end
 if ~isfield(eps.isdf, 'svd_ratio') || isempty(eps.isdf.svd_ratio)
     eps.isdf.svd_ratio = 0.5;
 end
+if ~isfield(eps.isdf, 'validate_hf_exchange') || isempty(eps.isdf.validate_hf_exchange)
+    % VC validation compares direct and ISDF Coulomb product norms after
+    % interpolation.  It is opt-in because it repeats the product FFTs.
+    eps.isdf.validate_hf_exchange = false;
+end
+if ~isfield(eps.isdf, 'validate_hf_exchange_max_pairs') || ...
+        isempty(eps.isdf.validate_hf_exchange_max_pairs)
+    eps.isdf.validate_hf_exchange_max_pairs = Inf;
+end
 
 if ~isfield(eps.isdf, 'reduced_solver') || isempty(eps.isdf.reduced_solver)
     eps.isdf.reduced_solver = 'cauchy';

@@ -25,7 +25,19 @@ if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
     options.fftgrid = fftgrid;
 end
 local_progress(options, 0.02, 'setup');
-[ind_mu, products, adaptive_state] = sample_points(left, right, options);
+if options.swap_left_right && options.adaptive_rank_enable
+    error('ISDF:SwapAdaptiveRank', ...
+        'swap_left_right is not supported with adaptive_rank_enable.');
+end
+if options.swap_left_right
+    % Keep the physical representation in the original left-right order.
+    % Only the QRCP/k-means point-selection control sees the conjugate
+    % right-left product space.
+    [ind_mu, ~, adaptive_state] = sample_points(right, left, options);
+    products = [];
+else
+    [ind_mu, products, adaptive_state] = sample_points(left, right, options);
+end
 local_progress(options, 0.35, 'sample points');
 adaptive_info = struct('enabled', false, 'residual', NaN, ...
     'initial_rank', options.rank, 'final_rank', options.rank, ...
@@ -35,7 +47,6 @@ if adaptive_state.enabled
     options.rank = adaptive_info.final_rank;
     options.rank_source = 'adaptive_qrcp';
 end
-local_print_rank(options, ngrid, nleft, nright);
 if isempty(products)
     product_mu = component_products(left, right, ind_mu, [], ...
         options.sample_precision, options.projection_block_elements);
@@ -53,7 +64,8 @@ if adaptive_state.enabled && adaptive_state.has_zeta
     zeta_real = adaptive_state.zeta;
     solve_info = adaptive_state.solve_info;
     zeta_g = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
-elseif strcmpi(options.sample_method, 'qrcp') && numel(left) > 1
+elseif strcmpi(options.sample_method, 'qrcp') && numel(left) > 1 && ...
+        ~isempty(products)
     if strcmp(options.interpolation_solver, 'svd_whiten')
         local_progress(options, 0.50, 'product Gram and SVD whitening');
         [c1, c2] = product_gram(left, right, ind_mu);
@@ -73,19 +85,21 @@ else
         local_progress(options, 0.78, 'SVD whitening and FFT');
         [zeta_g, product_mu, transform, solve_info] = svd_whiten( ...
             c1, c2, product_mu, idx_q, fftgrid, options);
+%         [zeta_g, ~, transform, solve_info] = svd_whiten( ...
+%             c1, c2, product_mu, idx_q, fftgrid, options);
     else
         local_progress(options, 0.78, 'interpolation solve and FFT');
         [zeta_g, solve_info] = zeta_to_g(c1, c2, idx_q, fftgrid, options);
     end
 end
-local_progress(options, 0.95, 'complete');
 
 space = struct();
 if numel(left) == 1
     space.phi = conj(left{1});
     space.psi = right{1};
 end
-if strcmpi(options.sample_method, 'qrcp') && numel(left) > 1
+if strcmpi(options.sample_method, 'qrcp') && numel(left) > 1 && ...
+        ~isempty(products)
     space.products = products;
 end
 space.ind_mu = ind_mu;
@@ -110,11 +124,14 @@ end
 space.options = options;
 space.solve_info = solve_info;
 space.adaptive_info = adaptive_info;
+space.sampling_swapped_left_right = options.swap_left_right;
 if numel(left) > 1 && ~strcmpi(options.sample_method, 'qrcp')
     space.ngrid = ngrid;
     space.nleft = nleft;
     space.nright = nright;
 end
+local_print_rank(options, ngrid, nleft, nright);
+local_progress(options, 1, 'complete');
 end
 
 function local_progress(options, fraction, stage)
