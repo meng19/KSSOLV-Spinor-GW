@@ -2,7 +2,7 @@
   "rng_seed": 0,
   "read_vxc": true,
   "qe_path": "../../example/qe_data/si8",
-  "qp_file": "si8_isdf_smoke_qp.dat",
+  "qp_file": "si8_isdf_exact_ch_smoke_qp.dat",
   "epsilon": {
     "nbnd": 48,
     "freq_dep": 0,
@@ -38,7 +38,7 @@
     "coul_cut": "spherical_truncation",
     "coul_cutoff": 5,
     "no_symmetries_q_grid": false,
-    "exact_static_ch": false,
+    "exact_static_ch": true,
     "use_gpu": false,
     "precompute_wav": false,
     "isdf": {

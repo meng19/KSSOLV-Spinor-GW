@@ -143,7 +143,12 @@ for ispin = 1 : nspin
                     'update_interval', progress_update_interval);
                 matrix_elements = ops.matrix_elements(block);
                 if sig.exact_static_ch && block.iq_fbz == 1
-                    aqsch{in, ispin} = matrix_elements.gme(:, in);
+                    if isfield(matrix_elements, 'gme_diag') && ...
+                            ~isempty(matrix_elements.gme_diag)
+                        aqsch{in, ispin} = matrix_elements.gme_diag;
+                    else
+                        aqsch{in, ispin} = matrix_elements.gme(:, in);
+                    end
                 end
                 block.aqsch = aqsch;
                 contribution = ops.contract(block, matrix_elements);

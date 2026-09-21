@@ -20,26 +20,56 @@ if use_isdf
         % terms.  rank_nn is independent of epsilon's VC rank.
         isdf_options = local_space_options( ...
             ctx, block, 'nn', progress_work, 0.22, 0.45, 'NN');
-    if strcmp(ctx.method, 'reduced_basis')
+        if strcmp(ctx.method, 'reduced_basis')
             gw_timer('start', 'Sigma ISDF interpolation');
             space = isdf.build_space(left, right, block.idx.q, ...
                 ctx.grid_size, isdf_options);
             gw_timer('stop', 'Sigma ISDF interpolation');
             local_validate_hf_exchange(ctx, block, space, left, right, ...
                 'NN');
-            gme = reshape(space.zeta_g * space.product_mu, ...
-                nq, ctx.nbands);
+            if local_needs_nn_gme(ctx)
+                gme = reshape(space.zeta_g * space.product_mu, ...
+                    nq, ctx.nbands);
+                if local_needs_exact_ch_diagonal(ctx, block)
+                    gme_diag = gme(:, block.in);
+                else
+                    gme_diag = [];
+                end
+            else
+                % Static VN exchange and reduced CH use coefficient-space
+                % contractions. Exact CH needs only rho_ii(G), not every
+                % rho_in(G) column in the full NN matrix-element table.
+                gme = [];
+                if local_needs_exact_ch_diagonal(ctx, block)
+                    gme_diag = local_isdf_diagonal_gme( ...
+                        space, nq, block.in);
+                else
+                    gme_diag = [];
+                end
+            end
         else
             gme3 = isdf.matrix_elements(left, right, block.idx.q, ...
                 ctx.grid_size, isdf_options);
             gme = reshape(gme3, nq, ctx.nbands);
             space = [];
         end
+        if isempty(gme)
+            nn_status = 'NN coefficient-space only';
+        else
+            nn_status = sprintf('NN G-space me %d/%d', ...
+                ctx.nbands, ctx.nbands);
+        end
         gw_block_progress(block, progress_work * 0.45, ...
-            sprintf('S b%d i%d q%d me %d/%d', ...
-            block.in, block.ik, block.iq, ctx.nbands, ctx.nbands));
+            sprintf('S b%d i%d q%d %s', ...
+            block.in, block.ik, block.iq, nn_status));
         matrix_elements.gme = gme;
+        matrix_elements.gme_diag = gme_diag;
         matrix_elements.space = space;
+        if isempty(space)
+            matrix_elements.coeff = [];
+        else
+            matrix_elements.coeff = space.product_mu;
+        end
         if isempty(space)
             matrix_elements.space_key = '';
         else
@@ -72,7 +102,9 @@ for nn = 1:ctx.nbands
         block.in, block.ik, block.iq, nn, ctx.nbands));
 end
 matrix_elements.gme = gme;
+matrix_elements.gme_diag = [];
 matrix_elements.space = [];
+matrix_elements.coeff = [];
 matrix_elements.space_key = '';
 end
 
@@ -100,15 +132,31 @@ if ~hit
     gw_timer('start', 'Sigma ISDF interpolation');
     space = isdf.build_space(left, right, block.idx.q, ...
         ctx.grid_size, isdf_options);
-%     space = isdf.build_space(right, left, block.idx.q, ...
-%         ctx.grid_size, isdf_options);
     gw_timer('stop', 'Sigma ISDF interpolation');
     local_validate_hf_exchange(ctx, block, space, left, right, 'NN');
     nq = numel(block.idx.q);
-    gme_all = reshape(space.zeta_g * space.product_mu, ...
-        nq, numel(left_bands), ctx.nbands);
+    if local_needs_nn_gme(ctx)
+        gme_all = reshape(space.zeta_g * space.product_mu, ...
+            nq, numel(left_bands), ctx.nbands);
+        if local_needs_exact_ch_diagonal(ctx, block)
+            gme_diag_all = local_diagonal_from_gme_all(gme_all, left_bands);
+        else
+            gme_diag_all = [];
+        end
+    else
+        % Keep the cached interpolation space and its coefficients, but do
+        % not materialize all target-band G-space pair densities. Exact CH
+        % needs only the diagonal rho_ii(G) columns.
+        gme_all = [];
+        if local_needs_exact_ch_diagonal(ctx, block)
+            gme_diag_all = local_isdf_diagonal_gme( ...
+                space, nq, left_bands);
+        else
+            gme_diag_all = [];
+        end
+    end
     entry = struct('left_bands', left_bands, 'space', space, ...
-        'gme_all', gme_all);
+        'gme_all', gme_all, 'gme_diag_all', gme_diag_all);
     sigma_isdf_component_cache('put', key, entry);
     space_status = 'built';
 end
@@ -118,8 +166,17 @@ if isempty(left_index)
     error('ISDF:GlobalNNSpaceBand', ...
         'Requested diagonal band %d is absent from global NN space.', block.in);
 end
-matrix_elements.gme = reshape(entry.gme_all(:, left_index, :), ...
-    numel(block.idx.q), ctx.nbands);
+if isempty(entry.gme_all)
+    matrix_elements.gme = [];
+else
+    matrix_elements.gme = reshape(entry.gme_all(:, left_index, :), ...
+        numel(block.idx.q), ctx.nbands);
+end
+if isempty(entry.gme_diag_all)
+    matrix_elements.gme_diag = [];
+else
+    matrix_elements.gme_diag = entry.gme_diag_all(:, left_index);
+end
 matrix_elements.space = entry.space;
 matrix_elements.space_key = key;
 % product_mu is ordered as (left band, right band).  Unlike gme_all, it
@@ -127,9 +184,14 @@ matrix_elements.space_key = key;
 % explicitly for the reduced screened-interaction contraction.
 matrix_elements.coeff = entry.space.product_mu(:, ...
     left_index:numel(entry.left_bands):end);
+if isempty(entry.gme_all)
+    nn_status = 'coefficient-space only';
+else
+    nn_status = 'G-space matrix elements';
+end
 gw_block_progress(block, progress_work * 0.45, ...
-    sprintf('S b%d k%d q%d NN %s: %d diag / %d sum', ...
-    block.in, block.ik, block.iq, space_status, ...
+    sprintf('S b%d k%d q%d NN %s, %s: %d diag / %d sum', ...
+    block.in, block.ik, block.iq, space_status, nn_status, ...
     numel(left_bands), ctx.nbands));
 end
 
@@ -168,8 +230,14 @@ if ~hit
             ctx.grid_size, isdf_options);
         gw_timer('stop', 'Sigma ISDF interpolation');
         local_validate_hf_exchange(ctx, block, space, left, right, 'VN');
-        gme_all = reshape(space.zeta_g * space.product_mu, nq, ...
-            numel(left_bands), numel(occupied_bands));
+        if local_needs_vn_gme(ctx)
+            gme_all = reshape(space.zeta_g * space.product_mu, nq, ...
+                numel(left_bands), numel(occupied_bands));
+        else
+            % Static reduced-basis VN exchange contracts the bare Coulomb
+            % kernel with these coefficients directly.
+            gme_all = [];
+        end
     else
         gme_all = reshape(isdf.matrix_elements(left, right, block.idx.q, ...
             ctx.grid_size, isdf_options), nq, numel(left_bands), ...
@@ -186,9 +254,11 @@ if isempty(left_index)
     error('ISDF:VNSpaceBand', ...
         'Requested diagonal band %d is absent from VN space.', block.in);
 end
-gme_exchange = struct('bands', entry.occupied_bands, ...
-    'values', reshape(entry.gme_all(:, left_index, :), ...
-    numel(block.idx.q), []));
+gme_exchange = struct('bands', entry.occupied_bands);
+if ~isempty(entry.gme_all)
+    gme_exchange.values = reshape(entry.gme_all(:, left_index, :), ...
+        numel(block.idx.q), []);
+end
 if isfield(entry, 'space') && ~isempty(entry.space)
     % Retain the VN coefficients and basis so static screened exchange can
     % use its own projected VC-screened kernel, as in gen_tildeWq_Gamma.
@@ -293,6 +363,43 @@ if ~any(strcmp(exchange_space, {'nn', 'vn'}))
 end
 tf = strcmp(exchange_space, 'vn') && ...
     ~ctx.sig.isdf.reuse_nn_for_vn;
+end
+
+function tf = local_needs_nn_gme(ctx)
+% Reduced-basis sigma contracts NN/VN bare exchange and correlation in
+% coefficient space at both static and full frequency. Exact CH needs only
+% rho_ii(G), handled separately by LOCAL_ISDF_DIAGONAL_GME.
+tf = ~strcmp(ctx.method, 'reduced_basis');
+end
+
+function tf = local_needs_vn_gme(ctx)
+% The reduced-basis VN path retains coefficients for both static and
+% full-frequency contractions; only non-reduced paths need explicit G data.
+tf = ~strcmp(ctx.method, 'reduced_basis');
+end
+
+function tf = local_needs_exact_ch_diagonal(ctx, block)
+% AQSch is recorded only at the Gamma full-BZ q-point and is then reused
+% by the exact static Coulomb-hole reference at the remaining q-points.
+tf = ctx.sig.exact_static_ch && block.iq_fbz == 1;
+end
+
+function gme_diag = local_isdf_diagonal_gme(space, nq, left_bands)
+% Reconstruct only rho_ii(G). PRODUCT_MU columns are ordered as
+% (left-band, right-band), and the right side contains bands 1:nbands.
+nleft = numel(left_bands);
+columns = (left_bands - 1) * nleft + (1:nleft);
+gme_diag = reshape(space.zeta_g * space.product_mu(:, columns), nq, nleft);
+end
+
+function gme_diag = local_diagonal_from_gme_all(gme_all, left_bands)
+% Extract rho_ii(G) from an already materialized G-space tensor.
+nleft = numel(left_bands);
+nq = size(gme_all, 1);
+gme_diag = zeros(nq, nleft, 'like', gme_all);
+for ileft = 1:nleft
+    gme_diag(:, ileft) = gme_all(:, ileft, left_bands(ileft));
+end
 end
 
 function local_validate_hf_exchange(ctx, block, space, left, right, label)

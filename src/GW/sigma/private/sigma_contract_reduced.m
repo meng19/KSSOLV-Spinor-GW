@@ -34,6 +34,10 @@ end
 if ctx.sig.freq_dep == 2
     omega = [];
     iw_lda = [];
+    % Bare exchange is frequency independent. Compute all occupied-band
+    % terms once in the same ISDF coefficient-space metric used below.
+    occ = reshape(block.occ_kq, 1, []);
+    ax_loc = local_batch_exchange(ctx, block, matrix_elements, occ);
 end
 progress_work = gw_block_work(block, 1);
 if ctx.sig.freq_dep == 0
@@ -46,13 +50,6 @@ if ctx.sig.freq_dep == 0
         block.in, block.ik, block.iq, ctx.nbands));
 else
 for nn = 1:ctx.nbands
-    aqs = matrix_elements.gme(:, nn);
-    if block.occ_kq(nn) > 0
-        aqs_exchange = sigma_exchange_matrix_element(matrix_elements, nn, aqs);
-        ax_loc = ax_loc - block.occ_kq(nn) * ctx.fact * ...
-            sum(abs(aqs_exchange).^2 .* block.coulg);
-    end
-
     if isfield(matrix_elements, 'coeff')
         coeff = matrix_elements.coeff(:, nn);
     else
@@ -81,16 +78,22 @@ end
 
 achx_loc = 0;
 if ctx.sig.exact_static_ch
-    gw_timer('start', 'Sigma full screened kernel');
-    screened_matrix = ctx.fact * local_full_kernel(ctx, block);
-    gw_timer('stop', 'Sigma full screened kernel');
-    kdata = ctx.kdata{block.ik};
-    exact_ch = sigma_cohsex_exact_ch(block.in, block.ispin, ...
-        ctx.fbz, kdata.indrk, block.iq, block.aqsch, ...
-        screened_matrix, ctx.sig, block.igpp, block.valid_indices);
     if ctx.sig.freq_dep == 0
-        achx_loc = sum(exact_ch, 'all');
+        % Keep the exact G-G' difference-vector mapping, but contract it
+        % directly with the ISDF screened-W factors.  This is algebraically
+        % identical to sum(aqsch_tmp .* local_full_kernel, 'all') without
+        % materializing the nG-by-nG screened kernel.
+        gw_timer('start', 'Sigma exact CH factor contraction');
+        achx_loc = local_exact_ch_factor_contract(ctx, block);
+        gw_timer('stop', 'Sigma exact CH factor contraction');
     elseif ctx.sig.freq_dep == 2
+        gw_timer('start', 'Sigma full screened kernel');
+        screened_matrix = ctx.fact * local_full_kernel(ctx, block);
+        gw_timer('stop', 'Sigma full screened kernel');
+        kdata = ctx.kdata{block.ik};
+        exact_ch = sigma_cohsex_exact_ch(block.in, block.ispin, ...
+            ctx.fbz, kdata.indrk, block.iq, block.aqsch, ...
+            screened_matrix, ctx.sig, block.igpp, block.valid_indices);
         achx_loc_nn(block.in, 1) = achx_loc_nn(block.in, 1) + ...
             0.5 * 0.5 * sum(exact_ch, 'all');
         achx_loc = sum(achx_loc_nn(block.in, :), 'all');
@@ -148,10 +151,34 @@ end
 function ax_loc = local_batch_exchange(ctx, block, matrix_elements, occ)
 if isfield(matrix_elements, 'gme_exchange') && ...
         isstruct(matrix_elements.gme_exchange)
-    bands = matrix_elements.gme_exchange.bands;
-    values = matrix_elements.gme_exchange.values;
-    exchange_values = sum(bsxfun(@times, abs(values).^2, block.coulg), 1);
-    ax_loc = -ctx.fact * sum(occ(bands) .* exchange_values);
+    vn = matrix_elements.gme_exchange;
+    bands = vn.bands;
+    if isfield(vn, 'space') && isfield(vn, 'coeff') && ...
+            ~isempty(vn.space) && ~isempty(vn.coeff)
+        gw_timer('start', 'Sigma VN bare kernel');
+        bare_kernel = local_bare_kernel(block, vn.space);
+        gw_timer('stop', 'Sigma VN bare kernel');
+        bare_coeff = bare_kernel * conj(vn.coeff);
+        exchange_values = sum(vn.coeff .* bare_coeff, 1);
+        ax_loc = -ctx.fact * sum(occ(bands) .* exchange_values);
+        return;
+    elseif isfield(vn, 'values') && ~isempty(vn.values)
+        values = vn.values;
+        exchange_values = sum(bsxfun(@times, abs(values).^2, ...
+            block.coulg), 1);
+        ax_loc = -ctx.fact * sum(occ(bands) .* exchange_values);
+        return;
+    end
+end
+if isfield(matrix_elements, 'space') && isfield(matrix_elements, 'coeff') && ...
+        ~isempty(matrix_elements.space) && ~isempty(matrix_elements.coeff)
+    % Static NN exchange in the same coefficient-space Coulomb metric.
+    gw_timer('start', 'Sigma NN bare kernel');
+    bare_kernel = local_bare_kernel(block, matrix_elements.space);
+    gw_timer('stop', 'Sigma NN bare kernel');
+    bare_coeff = bare_kernel * conj(matrix_elements.coeff);
+    exchange_values = sum(matrix_elements.coeff .* bare_coeff, 1);
+    ax_loc = -ctx.fact * sum(occ .* exchange_values);
     return;
 end
 exchange_values = sum(bsxfun(@times, abs(matrix_elements.gme).^2, ...
@@ -188,11 +215,58 @@ kernel = isdf.screened_kernel(block.screened_w, target_zeta, ...
     vn.space_key));
 end
 
+function kernel = local_bare_kernel(block, space)
+% Bare product-space Coulomb metric. For gme = zeta_g * coeff this gives
+% sum_G v_G*abs(gme_Gn)^2 = coeff(:,n).'*kernel*conj(coeff(:,n)).
+target_zeta = space.zeta_g(1:numel(block.coulg), :);
+coulg = block.coulg(:);
+if isa(target_zeta, 'gpuArray') && ~isa(coulg, 'gpuArray')
+    coulg = gpuArray(coulg);
+end
+kernel = target_zeta.' * (coulg .* conj(target_zeta));
+end
+
 function kernel = local_full_kernel(ctx, block)
 % q-only projection used by the exact static Coulomb-hole reference.
 
 kernel = isdf.screened_kernel(block.screened_w, [], block.coulg_cutoff, ...
     local_kernel_key(ctx, block, 'full', ''));
+end
+
+function value = local_exact_ch_factor_contract(ctx, block)
+% Exact-CH mapping in G-G' is retained, while W-v is applied through
+% L*k_mu*R instead of being formed as a full G-space matrix.
+screened = block.screened_w;
+epsilon_vcoul = screened.epsilon_vcoul(:);
+contract_vcoul = block.coulg_cutoff(:);
+zeta_g = screened.zeta_g;
+if isa(zeta_g, 'gpuArray') && ~isa(epsilon_vcoul, 'gpuArray')
+    epsilon_vcoul = gpuArray(epsilon_vcoul);
+end
+if isa(zeta_g, 'gpuArray') && ~isa(contract_vcoul, 'gpuArray')
+    contract_vcoul = gpuArray(contract_vcoul);
+end
+
+left_factor = epsilon_vcoul .* zeta_g;
+if isequal(epsilon_vcoul, contract_vcoul) && isreal(epsilon_vcoul)
+    right_factor = left_factor';
+else
+    right_factor = zeta_g' .* contract_vcoul.';
+end
+
+ncut = block.n_cutoff;
+aqsch_tmp = complex(zeros(ncut, ncut, 'like', left_factor));
+aqsch_source = block.aqsch{block.in, block.ispin};
+if isa(left_factor, 'gpuArray') && ~isa(aqsch_source, 'gpuArray')
+    aqsch_source = gpuArray(aqsch_source);
+end
+aqsch_tmp(block.valid_indices) = ...
+    aqsch_source(block.igpp(block.valid_indices));
+
+% sum(A .* (L*k*R), 'all') = sum(((A.'*L)*k) .* R.', 'all')
+mapped_left = aqsch_tmp.' * left_factor;
+k_mu = screened.k_mu(:, :, 1);
+value = ctx.fact * sum((mapped_left * k_mu) .* right_factor.', 'all');
 end
 
 function key = local_space_key(matrix_elements)
