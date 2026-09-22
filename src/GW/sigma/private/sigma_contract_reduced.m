@@ -75,13 +75,16 @@ end
 achx_loc = 0;
 if ctx.sig.exact_static_ch
     if ctx.sig.freq_dep == 0
-        % Keep the exact G-G' difference-vector mapping, but contract it
-        % directly with the ISDF screened-W factors.  This is algebraically
-        % identical to sum(aqsch_tmp .* local_full_kernel, 'all') without
-        % materializing the nG-by-nG screened kernel.
-        gw_timer('start', 'Sigma exact CH factor contraction');
-        achx_loc = local_exact_ch_factor_contract(ctx, block);
-        gw_timer('stop', 'Sigma exact CH factor contraction');
+        % Use the established exact-CH path: form the G-space screened
+        % interaction and then apply the precomputed G-G' difference map.
+        % This dense route trades an nG-by-nG temporary for faster BLAS.
+        gw_timer('start', 'Sigma full screened kernel');
+        screened_matrix = ctx.fact * local_full_kernel(ctx, block);
+        gw_timer('stop', 'Sigma full screened kernel');
+        exact_ch = sigma_cohsex_exact_ch(block.in, block.ispin, ...
+            ctx.fbz, ctx.kdata{block.ik}.indrk, block.iq, block.aqsch, ...
+            screened_matrix, ctx.sig, block.igpp, block.valid_indices);
+        achx_loc = sum(exact_ch, 'all');
     elseif ctx.sig.freq_dep == 2
         gw_timer('start', 'Sigma full screened kernel');
         screened_matrix = ctx.fact * local_full_kernel(ctx, block);
@@ -168,13 +171,18 @@ if isfield(matrix_elements, 'gme_exchange') && ...
 end
 if isfield(matrix_elements, 'space') && isfield(matrix_elements, 'coeff') && ...
         ~isempty(matrix_elements.space) && ~isempty(matrix_elements.coeff)
-    % G-space bare exchange is cheaper than forming an r-by-r Coulomb
-    % metric when the number of requested bands is smaller than r.
+    % Bare exchange has support only on occupied bands.  Do not form GME
+    % columns for empty states that will be multiplied by zero afterwards.
+    occupied = find(gw_gather_if_gpu(occ) > 0);
+    if isempty(occupied)
+        ax_loc = 0;
+        return;
+    end
     gw_timer('start', 'Sigma NN bare exchange GME');
     exchange_values = local_bare_exchange_values( ...
-        block, matrix_elements.space, matrix_elements.coeff);
+        block, matrix_elements.space, matrix_elements.coeff(:, occupied));
     gw_timer('stop', 'Sigma NN bare exchange GME');
-    ax_loc = -ctx.fact * sum(occ .* exchange_values);
+    ax_loc = -ctx.fact * sum(occ(occupied) .* exchange_values);
     return;
 end
 exchange_values = sum(bsxfun(@times, abs(matrix_elements.gme).^2, ...
@@ -211,42 +219,6 @@ function kernel = local_full_kernel(ctx, block)
 
 kernel = isdf.screened_kernel(block.screened_w, [], block.coulg_cutoff, ...
     local_kernel_key(ctx, block, 'full', ''));
-end
-
-function value = local_exact_ch_factor_contract(ctx, block)
-% Exact-CH mapping in G-G' is retained, while W-v is applied through
-% L*k_mu*R instead of being formed as a full G-space matrix.
-screened = block.screened_w;
-epsilon_vcoul = screened.epsilon_vcoul(:);
-contract_vcoul = block.coulg_cutoff(:);
-zeta_g = screened.zeta_g;
-if isa(zeta_g, 'gpuArray') && ~isa(epsilon_vcoul, 'gpuArray')
-    epsilon_vcoul = gpuArray(epsilon_vcoul);
-end
-if isa(zeta_g, 'gpuArray') && ~isa(contract_vcoul, 'gpuArray')
-    contract_vcoul = gpuArray(contract_vcoul);
-end
-
-left_factor = epsilon_vcoul .* zeta_g;
-if isequal(epsilon_vcoul, contract_vcoul) && isreal(epsilon_vcoul)
-    right_factor = left_factor';
-else
-    right_factor = zeta_g' .* contract_vcoul.';
-end
-
-ncut = block.n_cutoff;
-aqsch_tmp = complex(zeros(ncut, ncut, 'like', left_factor));
-aqsch_source = block.aqsch{block.in, block.ispin};
-if isa(left_factor, 'gpuArray') && ~isa(aqsch_source, 'gpuArray')
-    aqsch_source = gpuArray(aqsch_source);
-end
-aqsch_tmp(block.valid_indices) = ...
-    aqsch_source(block.igpp(block.valid_indices));
-
-% sum(A .* (L*k*R), 'all') = sum(((A.'*L)*k) .* R.', 'all')
-mapped_left = aqsch_tmp.' * left_factor;
-k_mu = screened.k_mu(:, :, 1);
-value = ctx.fact * sum((mapped_left * k_mu) .* right_factor.', 'all');
 end
 
 function key = local_space_key(matrix_elements)
