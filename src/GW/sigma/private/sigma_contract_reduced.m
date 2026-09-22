@@ -152,11 +152,10 @@ if isfield(matrix_elements, 'gme_exchange') && ...
     bands = vn.bands;
     if isfield(vn, 'space') && isfield(vn, 'coeff') && ...
             ~isempty(vn.space) && ~isempty(vn.coeff)
-        gw_timer('start', 'Sigma VN bare kernel');
-        bare_kernel = local_bare_kernel(block, vn.space);
-        gw_timer('stop', 'Sigma VN bare kernel');
-        bare_coeff = bare_kernel * conj(vn.coeff);
-        exchange_values = sum(vn.coeff .* bare_coeff, 1);
+        gw_timer('start', 'Sigma VN bare exchange GME');
+        exchange_values = local_bare_exchange_values( ...
+            block, vn.space, vn.coeff);
+        gw_timer('stop', 'Sigma VN bare exchange GME');
         ax_loc = -ctx.fact * sum(occ(bands) .* exchange_values);
         return;
     elseif isfield(vn, 'values') && ~isempty(vn.values)
@@ -169,12 +168,12 @@ if isfield(matrix_elements, 'gme_exchange') && ...
 end
 if isfield(matrix_elements, 'space') && isfield(matrix_elements, 'coeff') && ...
         ~isempty(matrix_elements.space) && ~isempty(matrix_elements.coeff)
-    % Static NN exchange in the same coefficient-space Coulomb metric.
-    gw_timer('start', 'Sigma NN bare kernel');
-    bare_kernel = local_bare_kernel(block, matrix_elements.space);
-    gw_timer('stop', 'Sigma NN bare kernel');
-    bare_coeff = bare_kernel * conj(matrix_elements.coeff);
-    exchange_values = sum(matrix_elements.coeff .* bare_coeff, 1);
+    % G-space bare exchange is cheaper than forming an r-by-r Coulomb
+    % metric when the number of requested bands is smaller than r.
+    gw_timer('start', 'Sigma NN bare exchange GME');
+    exchange_values = local_bare_exchange_values( ...
+        block, matrix_elements.space, matrix_elements.coeff);
+    gw_timer('stop', 'Sigma NN bare exchange GME');
     ax_loc = -ctx.fact * sum(occ .* exchange_values);
     return;
 end
@@ -200,15 +199,11 @@ kernel = isdf.screened_kernel(block.screened_w, target_zeta, ...
     space_key));
 end
 
-function kernel = local_bare_kernel(block, space)
-% Bare product-space Coulomb metric. For gme = zeta_g * coeff this gives
-% sum_G v_G*abs(gme_Gn)^2 = coeff(:,n).'*kernel*conj(coeff(:,n)).
+function values = local_bare_exchange_values(block, space, coeff)
+% G-space bare exchange: sum_G v_G*abs((zeta_g*coeff)_Gn)^2.
 target_zeta = space.zeta_g(1:numel(block.coulg), :);
-coulg = block.coulg(:);
-if isa(target_zeta, 'gpuArray') && ~isa(coulg, 'gpuArray')
-    coulg = gpuArray(coulg);
-end
-kernel = target_zeta.' * (coulg .* conj(target_zeta));
+gme = target_zeta * coeff;
+values = sum(bsxfun(@times, abs(gme).^2, block.coulg), 1);
 end
 
 function kernel = local_full_kernel(ctx, block)
