@@ -17,7 +17,8 @@ if size(block.screened_w.zeta_g, 1) ~= block.n_cutoff
 end
 
 gw_timer('start', 'Sigma screened kernel');
-kernel = local_target_kernel(ctx, block, matrix_elements);
+kernel = local_project_screened_kernel(ctx, block, matrix_elements.space, ...
+    local_space_key(matrix_elements));
 gw_timer('stop', 'Sigma screened kernel');
 asx_loc = 0;
 ax_loc = 0;
@@ -49,27 +50,22 @@ if ctx.sig.freq_dep == 0
         sprintf('S b%d k%d q%d static: all %d sum bands', ...
         block.in, block.ik, block.iq, ctx.nbands));
 else
+if ctx.sig.freq_dep ~= 2
+    error('ISDF:ReducedSigmaFrequencyMode', ...
+        'Reduced sigma supports freq_dep = 0 or 2 (got %g).', ...
+        ctx.sig.freq_dep);
+end
 for nn = 1:ctx.nbands
     if isfield(matrix_elements, 'coeff')
         coeff = matrix_elements.coeff(:, nn);
     else
         coeff = matrix_elements.space.product_mu(:, nn);
     end
-    if ctx.sig.freq_dep == 0
-        kernel_static = kernel(:, :, 1);
-        screened_value = ctx.fact * isdf.screened_contract( ...
-            kernel_static, coeff);
-        if block.occ_kq(nn) > 0
-            asx_loc = asx_loc - block.occ_kq(nn) * screened_value;
-        end
-        ach_loc = ach_loc + screened_value;
-    elseif ctx.sig.freq_dep == 2
-        [asx_loc, ach_loc, achx_loc_nn(block.in, nn), ...
-            omega, iw_lda] = sigma_fullfreq(asx_loc, ach_loc, ...
-            block.in, nn, block.wfnk.ikq, block.wfnkq.ikq, ...
-            block.occ_kq(nn), ctx.options.ev, block.ispin, ...
-            coeff, coeff, ctx.fact * kernel, ctx.sig);
-    end
+    [asx_loc, ach_loc, achx_loc_nn(block.in, nn), ...
+        omega, iw_lda] = sigma_fullfreq(asx_loc, ach_loc, ...
+        block.in, nn, block.wfnk.ikq, block.wfnkq.ikq, ...
+        block.occ_kq(nn), ctx.options.ev, block.ispin, ...
+        coeff, coeff, ctx.fact * kernel, ctx.sig);
     gw_block_progress(block, progress_work * (0.5 + 0.5 * nn / ctx.nbands), ...
         sprintf('S b%d i%d q%d n%d/%d', ...
         block.in, block.ik, block.iq, nn, ctx.nbands));
@@ -127,7 +123,8 @@ end
 if local_has_vn_screened_exchange(matrix_elements)
     vn = matrix_elements.gme_exchange;
     gw_timer('start', 'Sigma VN screened kernel');
-    vn_kernel = local_vn_exchange_kernel(ctx, block, vn);
+    vn_kernel = local_project_screened_kernel(ctx, block, vn.space, ...
+        vn.space_key);
     gw_timer('stop', 'Sigma VN screened kernel');
     vn_kernel_coeff = vn_kernel * conj(vn.coeff);
     vn_values = ctx.fact * sum(vn.coeff .* vn_kernel_coeff, 1);
@@ -194,25 +191,13 @@ else
 end
 end
 
-function kernel = local_target_kernel(ctx, block, matrix_elements)
-% Project the reduced screened interaction onto this block's target product
-% space.  The projection depends only on (k, q, target space), so every
-% diagonal band that shares one space reuses a single cached kernel.
-
-target_zeta = matrix_elements.space.zeta_g(1:block.n_cutoff, :);
+function kernel = local_project_screened_kernel(ctx, block, space, space_key)
+% Project W-v into one target ISDF product space.  It is shared by NN and
+% VN contractions; their distinct space keys keep cached projections safe.
+target_zeta = space.zeta_g(1:block.n_cutoff, :);
 kernel = isdf.screened_kernel(block.screened_w, target_zeta, ...
     block.coulg_cutoff, local_kernel_key(ctx, block, 'target', ...
-    local_space_key(matrix_elements)));
-end
-
-function kernel = local_vn_exchange_kernel(ctx, block, vn)
-% VN analogue of the reference tildeWq_vn.  SCREENED_KERNEL is W-v, so
-% its sign follows the current sigma convention rather than the positive
-% V*K^{-1}*V quantity stored by gen_tildeWq_Gamma.
-target_zeta = vn.space.zeta_g(1:block.n_cutoff, :);
-kernel = isdf.screened_kernel(block.screened_w, target_zeta, ...
-    block.coulg_cutoff, local_kernel_key(ctx, block, 'target', ...
-    vn.space_key));
+    space_key));
 end
 
 function kernel = local_bare_kernel(block, space)

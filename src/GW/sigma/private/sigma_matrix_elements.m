@@ -27,25 +27,14 @@ if use_isdf
             gw_timer('stop', 'Sigma ISDF interpolation');
             local_validate_hf_exchange(ctx, block, space, left, right, ...
                 'NN');
-            if local_needs_nn_gme(ctx)
-                gme = reshape(space.zeta_g * space.product_mu, ...
-                    nq, ctx.nbands);
-                if local_needs_exact_ch_diagonal(ctx, block)
-                    gme_diag = gme(:, block.in);
-                else
-                    gme_diag = [];
-                end
+            % All reduced-basis sigma contractions use product_mu directly.
+            % Exact CH alone needs its diagonal rho_ii(G) form factor.
+            gme = [];
+            if local_needs_exact_ch_diagonal(ctx, block)
+                gme_diag = local_isdf_diagonal_gme( ...
+                    space, nq, block.in);
             else
-                % Static VN exchange and reduced CH use coefficient-space
-                % contractions. Exact CH needs only rho_ii(G), not every
-                % rho_in(G) column in the full NN matrix-element table.
-                gme = [];
-                if local_needs_exact_ch_diagonal(ctx, block)
-                    gme_diag = local_isdf_diagonal_gme( ...
-                        space, nq, block.in);
-                else
-                    gme_diag = [];
-                end
+                gme_diag = [];
             end
         else
             gme3 = isdf.matrix_elements(left, right, block.idx.q, ...
@@ -135,25 +124,14 @@ if ~hit
     gw_timer('stop', 'Sigma ISDF interpolation');
     local_validate_hf_exchange(ctx, block, space, left, right, 'NN');
     nq = numel(block.idx.q);
-    if local_needs_nn_gme(ctx)
-        gme_all = reshape(space.zeta_g * space.product_mu, ...
-            nq, numel(left_bands), ctx.nbands);
-        if local_needs_exact_ch_diagonal(ctx, block)
-            gme_diag_all = local_diagonal_from_gme_all(gme_all, left_bands);
-        else
-            gme_diag_all = [];
-        end
+    % Keep the interpolation space and coefficients; no reduced-basis
+    % sigma path materializes the full rho_in(G) table.
+    gme_all = [];
+    if local_needs_exact_ch_diagonal(ctx, block)
+        gme_diag_all = local_isdf_diagonal_gme( ...
+            space, nq, left_bands);
     else
-        % Keep the cached interpolation space and its coefficients, but do
-        % not materialize all target-band G-space pair densities. Exact CH
-        % needs only the diagonal rho_ii(G) columns.
-        gme_all = [];
-        if local_needs_exact_ch_diagonal(ctx, block)
-            gme_diag_all = local_isdf_diagonal_gme( ...
-                space, nq, left_bands);
-        else
-            gme_diag_all = [];
-        end
+        gme_diag_all = [];
     end
     entry = struct('left_bands', left_bands, 'space', space, ...
         'gme_all', gme_all, 'gme_diag_all', gme_diag_all);
@@ -230,14 +208,9 @@ if ~hit
             ctx.grid_size, isdf_options);
         gw_timer('stop', 'Sigma ISDF interpolation');
         local_validate_hf_exchange(ctx, block, space, left, right, 'VN');
-        if local_needs_vn_gme(ctx)
-            gme_all = reshape(space.zeta_g * space.product_mu, nq, ...
-                numel(left_bands), numel(occupied_bands));
-        else
-            % Static reduced-basis VN exchange contracts the bare Coulomb
-            % kernel with these coefficients directly.
-            gme_all = [];
-        end
+        % Reduced-basis VN exchange and correlation use these coefficients
+        % directly; no occupied-band G-space table is needed.
+        gme_all = [];
     else
         gme_all = reshape(isdf.matrix_elements(left, right, block.idx.q, ...
             ctx.grid_size, isdf_options), nq, numel(left_bands), ...
@@ -365,19 +338,6 @@ tf = strcmp(exchange_space, 'vn') && ...
     ~ctx.sig.isdf.reuse_nn_for_vn;
 end
 
-function tf = local_needs_nn_gme(ctx)
-% Reduced-basis sigma contracts NN/VN bare exchange and correlation in
-% coefficient space at both static and full frequency. Exact CH needs only
-% rho_ii(G), handled separately by LOCAL_ISDF_DIAGONAL_GME.
-tf = ~strcmp(ctx.method, 'reduced_basis');
-end
-
-function tf = local_needs_vn_gme(ctx)
-% The reduced-basis VN path retains coefficients for both static and
-% full-frequency contractions; only non-reduced paths need explicit G data.
-tf = ~strcmp(ctx.method, 'reduced_basis');
-end
-
 function tf = local_needs_exact_ch_diagonal(ctx, block)
 % AQSch is recorded only at the Gamma full-BZ q-point and is then reused
 % by the exact static Coulomb-hole reference at the remaining q-points.
@@ -390,16 +350,6 @@ function gme_diag = local_isdf_diagonal_gme(space, nq, left_bands)
 nleft = numel(left_bands);
 columns = (left_bands - 1) * nleft + (1:nleft);
 gme_diag = reshape(space.zeta_g * space.product_mu(:, columns), nq, nleft);
-end
-
-function gme_diag = local_diagonal_from_gme_all(gme_all, left_bands)
-% Extract rho_ii(G) from an already materialized G-space tensor.
-nleft = numel(left_bands);
-nq = size(gme_all, 1);
-gme_diag = zeros(nq, nleft, 'like', gme_all);
-for ileft = 1:nleft
-    gme_diag(:, ileft) = gme_all(:, ileft, left_bands(ileft));
-end
 end
 
 function local_validate_hf_exchange(ctx, block, space, left, right, label)
