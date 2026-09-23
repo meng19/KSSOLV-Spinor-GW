@@ -1,0 +1,52 @@
+{
+  "rng_seed": 0,
+  "read_vxc": true,
+  "qe_path": "/public/home/mxy/work/spinor_gw/speed/si128/Si128_FR/02-wfn/Si128_FR.save",
+  "qp_file": "si128_isdf_qp.dat",
+  "epsilon": {
+    "nbnd": 1023,
+    "freq_dep": 0,
+    "cutoff": 5,
+    "coul_cut": "spherical_truncation",
+    "coul_cutoff": 5,
+    "save_mem": false,
+    "use_gpu": false,
+    "precompute_wav": false,
+    "isdf": {
+      "enable": true,
+      "algorithm": "reduced_basis",
+      "output": "screened_w",
+      "sample_method": "kmeans",
+      "rank_ratio_vc": 12,
+      "adaptive_rank_enable": false,
+      "seed": 0,
+      "reduced_solver": "cauchy"
+    }
+  },
+  "sigma": {
+    "nbnd": 1023,
+    "ndiag_min": 1,
+    "ndiag_max": 1023,
+    "freq_dep": 0,
+    "coul_cut": "spherical_truncation",
+    "coul_cutoff": 5,
+    "no_symmetries_q_grid": false,
+    "exact_static_ch": true,
+    "use_gpu": false,
+    "precompute_wav": false,
+    "isdf": {
+      "enable": true,
+      "algorithm": "reduced_basis",
+      "sample_method": "kmeans",
+      "rank_ratio_nn": 16,
+      "rank_ratio_vn": 24,
+      "exchange_space": "vn",
+      "reuse_nn_for_vn": true,
+      "adaptive_rank_enable": false,
+      "global_nn_space": true,
+      "global_vn_space": true,
+      "seed": 0,
+      "reduced_solver": "cauchy"
+    }
+  }
+}

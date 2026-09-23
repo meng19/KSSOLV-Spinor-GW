@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH -J Si32_cpu
+#SBATCH -p long
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 1
+#SBATCH -o %j.log
+#SBATCH -e %j.err
+#SBATCH --exclusive
+echo "SLURM_JOB_PARTITION=$SLURM_JOB_PARTITION"
+echo "SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST"
+echo Time is `date`
+echo Directory is $PWD
+echo This job runs on the following nodes:
+echo $SLURM_JOB_NODELIST
+echo This job has allocated $SLURM_JOB_CPUS_PER_NODE cpu cores.
+
+ulimit -s unlimited
+module purge
+module load apps/matlab/R2024a
+matlab -nodisplay -nodesktop -nosplash -singleCompThread -r si32 > log_si32 
+
+YY=`date +%Y`
+MM=`date +%m`
+DD=`date +%d`
+echo '  '$PWD'  Finished at  ' `date` '  ' >> /public/home/mxy/slurm_log/$YY-$MM-$DD.log
