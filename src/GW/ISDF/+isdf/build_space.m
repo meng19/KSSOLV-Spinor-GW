@@ -21,6 +21,7 @@ nright = size(right{1}, 2);
 options.weight_was_set = isfield(options, 'weight') && ...
     ~isempty(options.weight);
 options = set_defaults(options, nleft, nright, ngrid);
+local_print_rank(options, ngrid, nleft, nright);
 if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
     options.fftgrid = fftgrid;
 end
@@ -47,11 +48,14 @@ if adaptive_state.enabled
     options.rank = adaptive_info.final_rank;
     options.rank_source = 'adaptive_qrcp';
 end
-if isempty(products)
+materialize_product_mu = local_materialize_product_mu(options, nleft, nright);
+if isempty(products) && materialize_product_mu
     product_mu = component_products(left, right, ind_mu, [], ...
         options.sample_precision, options.projection_block_elements);
-else
+elseif ~isempty(products)
     product_mu = products(ind_mu, :);
+else
+    product_mu = [];
 end
 local_progress(options, 0.45, 'product values');
 
@@ -80,8 +84,8 @@ elseif strcmpi(options.sample_method, 'qrcp') && numel(left) > 1 && ...
     end
 else
     local_progress(options, 0.50, 'product Gram');
-    [c1, c2] = product_gram(left, right, ind_mu);
     if strcmp(options.interpolation_solver, 'svd_whiten')
+        [c1, c2] = product_gram(left, right, ind_mu);
         local_progress(options, 0.78, 'SVD whitening and FFT');
         [zeta_g, product_mu, transform, solve_info] = svd_whiten( ...
             c1, c2, product_mu, idx_q, fftgrid, options);
@@ -89,8 +93,23 @@ else
 %             c1, c2, product_mu, idx_q, fftgrid, options);
     else
         local_progress(options, 0.78, 'interpolation solve and FFT');
-        [zeta_g, solve_info] = zeta_to_g(c1, c2, idx_q, fftgrid, options);
+        if local_stream_product_gram(options, ngrid)
+            [c1_g, c2] = product_gram(left, right, ind_mu, ...
+                idx_q, fftgrid, options);
+            [zeta_g, solve_info] = zeta_to_g(c1_g, c2, [], [], options);
+        else
+            [c1, c2] = product_gram(left, right, ind_mu);
+            [zeta_g, solve_info] = zeta_to_g(c1, c2, ...
+                idx_q, fftgrid, options);
+        end
     end
+end
+
+% Exact QRCP necessarily materializes products while selecting pivots, but
+% the final space can still release its selected coefficient matrix when
+% lazy storage was requested.  product_coefficients then reconstructs it.
+if ~materialize_product_mu
+    product_mu = [];
 end
 
 space = struct();
@@ -125,13 +144,32 @@ space.options = options;
 space.solve_info = solve_info;
 space.adaptive_info = adaptive_info;
 space.sampling_swapped_left_right = options.swap_left_right;
-if numel(left) > 1 && ~strcmpi(options.sample_method, 'qrcp')
-    space.ngrid = ngrid;
-    space.nleft = nleft;
-    space.nright = nright;
-end
-local_print_rank(options, ngrid, nleft, nright);
+space.ngrid = ngrid;
+space.nleft = nleft;
+space.nright = nright;
 local_progress(options, 1, 'complete');
+end
+
+function tf = local_materialize_product_mu(options, nleft, nright)
+switch options.product_mu_storage
+    case 'full'
+        tf = true;
+    case 'lazy'
+        tf = false;
+    otherwise
+        tf = options.rank * nleft * nright <= options.product_mu_max_elements;
+end
+end
+
+function tf = local_stream_product_gram(options, ngrid)
+switch options.product_gram_storage
+    case 'full'
+        tf = false;
+    case 'stream'
+        tf = true;
+    otherwise
+        tf = ngrid * options.rank > options.product_gram_max_elements;
+end
 end
 
 function local_progress(options, fraction, stage)

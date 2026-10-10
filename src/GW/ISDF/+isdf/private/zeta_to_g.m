@@ -1,6 +1,17 @@
 function [zeta_g, info] = zeta_to_g( ...
     numerator, denominator, idx_q, fftgrid, options)
 %ZETA_TO_G Solve optional Gram factors and transform interpolation vectors.
+%   Empty idx_q and fftgrid denote numerator values already in G space.
+
+if isempty(idx_q) || isempty(fftgrid)
+    if isempty(denominator)
+        zeta_g = numerator;
+        info = [];
+    else
+        [zeta_g, info] = stable_solve(numerator, denominator, options);
+    end
+    return;
+end
 
 if isempty(denominator)
     zeta_real = numerator;

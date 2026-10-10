@@ -33,7 +33,13 @@ if isa(c1, 'gpuArray')
     transform = gpuArray(transform);
 end
 zeta_real = c1 * right_factor;
-coeff = transform * product_mu;
+if isempty(product_mu)
+    % In lazy product_mu mode coefficients are regenerated in band-pair
+    % blocks by isdf.product_coefficients and transformed there.
+    coeff = [];
+else
+    coeff = transform * product_mu;
+end
 [zeta_g, solve_info] = zeta_to_g(zeta_real, [], idx_q, fftgrid, options);
 info = struct('method', 'svd_whiten', 'rank_before', size(c2, 1), ...
     'rank_after', numel(values), 'cutoff', options.svd_cutoff, ...

@@ -57,7 +57,7 @@ if use_isdf
         if isempty(space)
             matrix_elements.coeff = [];
         else
-            matrix_elements.coeff = space.product_mu;
+            matrix_elements.coeff = isdf.product_coefficients(space);
         end
         if isempty(space)
             matrix_elements.space_key = '';
@@ -160,8 +160,8 @@ matrix_elements.space_key = key;
 % product_mu is ordered as (left band, right band).  Unlike gme_all, it
 % is not reshaped above, so retain the coefficients for this target band
 % explicitly for the reduced screened-interaction contraction.
-matrix_elements.coeff = entry.space.product_mu(:, ...
-    left_index:numel(entry.left_bands):end);
+matrix_elements.coeff = isdf.product_coefficients(entry.space, ...
+    left_index:numel(entry.left_bands):entry.space.nleft * entry.space.nright);
 if isempty(entry.gme_all)
     nn_status = 'coefficient-space only';
 else
@@ -236,8 +236,8 @@ if isfield(entry, 'space') && ~isempty(entry.space)
     % Retain the VN coefficients and basis so static screened exchange can
     % use its own projected VC-screened kernel, as in gen_tildeWq_Gamma.
     gme_exchange.space = entry.space;
-    gme_exchange.coeff = entry.space.product_mu(:, ...
-        left_index:numel(entry.left_bands):end);
+    gme_exchange.coeff = isdf.product_coefficients(entry.space, ...
+        left_index:numel(entry.left_bands):entry.space.nleft * entry.space.nright);
     gme_exchange.space_key = key;
 end
 end
@@ -349,7 +349,8 @@ function gme_diag = local_isdf_diagonal_gme(space, nq, left_bands)
 % (left-band, right-band), and the right side contains bands 1:nbands.
 nleft = numel(left_bands);
 columns = (left_bands - 1) * nleft + (1:nleft);
-gme_diag = reshape(space.zeta_g * space.product_mu(:, columns), nq, nleft);
+gme_diag = reshape(space.zeta_g * isdf.product_coefficients(space, columns), ...
+    nq, nleft);
 end
 
 function local_validate_hf_exchange(ctx, block, space, left, right, label)

@@ -116,6 +116,29 @@ assert(kmeans_error < 1e-10, ...
     'K-means component ISDF differs from direct FFT: %.3e', kmeans_error);
 assert(~isfield(kmeans_space, 'products'));
 
+stream_options = kmeans_options;
+stream_options.product_gram_storage = 'stream';
+stream_options.product_gram_block_elements = nfft;
+stream_space = isdf.build_space(left, right, ...
+    idx_q, fftgrid, stream_options);
+assert(isequal(stream_space.ind_mu, kmeans_space.ind_mu));
+stream_error = max(abs(stream_space.zeta_g(:) - kmeans_space.zeta_g(:)));
+assert(stream_error < 1e-10, ...
+    'Streamed product Gram differs from the dense path: %.3e', stream_error);
+
+lazy_options = kmeans_options;
+lazy_options.product_mu_storage = 'lazy';
+lazy_space = isdf.build_space(left, right, idx_q, fftgrid, lazy_options);
+assert(isempty(lazy_space.product_mu));
+lazy_coeff = isdf.product_coefficients(lazy_space);
+assert(max(abs(lazy_coeff(:) - products(lazy_space.ind_mu, :))) < 1e-12);
+lazy_actual = lazy_space.zeta_g * lazy_coeff;
+lazy_error = max(abs(lazy_actual(:) - direct(:)));
+assert(lazy_error < 1e-10, ...
+    'Lazy component ISDF differs from direct FFT: %.3e', lazy_error);
+assert(max(abs(isdf.product_coefficients(lazy_space, [2, 5]) - ...
+    lazy_coeff(:, [2, 5])), [], 'all') < 1e-12);
+
 explicit_add_options = kmeans_options;
 explicit_add_options.weight = 'add';
 explicit_add_space = isdf.build_space(left, right, ...
@@ -141,8 +164,10 @@ catch err
 end
 
 fprintf(['Component package ISDF tests passed. qrcp = %.3e, ' ...
-    'single = %.3e, randomized = %.3e, kmeans = %.3e, cauchy = %.3e\n'], ...
-    max_error, single_error, randomized_error, kmeans_error, relative_error);
+    'single = %.3e, randomized = %.3e, kmeans = %.3e, stream = %.3e, ' ...
+    'lazy = %.3e, cauchy = %.3e\n'], ...
+    max_error, single_error, randomized_error, kmeans_error, stream_error, ...
+    lazy_error, relative_error);
 
 % A single-component QRCP space must retain the legacy Gram solve.  Its
 % condition estimate is for P_mu*P_mu', rather than for rectangular P_mu.

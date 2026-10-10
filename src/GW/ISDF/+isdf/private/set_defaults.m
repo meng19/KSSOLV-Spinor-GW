@@ -105,6 +105,56 @@ if ~(isscalar(options.projection_block_elements) && ...
     error('ISDF:ProjectionBlockElements', ...
         'projection_block_elements must be a positive scalar.');
 end
+if ~isfield(options, 'product_mu_storage') || isempty(options.product_mu_storage)
+    % A dense nmu-by-(nleft*nright) coefficient matrix is prohibitive for
+    % large NN spaces.  Keep the historical dense representation for small
+    % spaces and regenerate selected band-pair columns from the values at
+    % interpolation points for larger ones.
+    options.product_mu_storage = 'auto';
+end
+options.product_mu_storage = lower(char(options.product_mu_storage));
+if ~any(strcmp(options.product_mu_storage, {'auto', 'full', 'lazy'}))
+    error('ISDF:ProductMuStorage', ...
+        'product_mu_storage must be ''auto'', ''full'', or ''lazy''.');
+end
+if ~isfield(options, 'product_mu_max_elements') || ...
+        isempty(options.product_mu_max_elements)
+    options.product_mu_max_elements = 2e7;
+end
+if ~(isscalar(options.product_mu_max_elements) && ...
+        options.product_mu_max_elements >= 1)
+    error('ISDF:ProductMuMaxElements', ...
+        'product_mu_max_elements must be a positive scalar.');
+end
+if ~isfield(options, 'product_gram_storage') || ...
+        isempty(options.product_gram_storage)
+    % Forming C1 has ngrid*rank entries.  Above this limit construct its
+    % Fourier samples in interpolation-point blocks instead.
+    options.product_gram_storage = 'auto';
+end
+options.product_gram_storage = lower(char(options.product_gram_storage));
+if ~any(strcmp(options.product_gram_storage, {'auto', 'full', 'stream'}))
+    error('ISDF:ProductGramStorage', ...
+        'product_gram_storage must be ''auto'', ''full'', or ''stream''.');
+end
+if ~isfield(options, 'product_gram_max_elements') || ...
+        isempty(options.product_gram_max_elements)
+    options.product_gram_max_elements = 2e7;
+end
+if ~(isscalar(options.product_gram_max_elements) && ...
+        options.product_gram_max_elements >= 1)
+    error('ISDF:ProductGramMaxElements', ...
+        'product_gram_max_elements must be a positive scalar.');
+end
+if ~isfield(options, 'product_gram_block_elements') || ...
+        isempty(options.product_gram_block_elements)
+    options.product_gram_block_elements = options.projection_block_elements;
+end
+if ~(isscalar(options.product_gram_block_elements) && ...
+        options.product_gram_block_elements >= 1)
+    error('ISDF:ProductGramBlockElements', ...
+        'product_gram_block_elements must be a positive scalar.');
+end
 if ~isfield(options, 'interpolation_solver') || isempty(options.interpolation_solver)
     options.interpolation_solver = 'direct';
 end

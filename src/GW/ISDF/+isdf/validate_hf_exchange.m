@@ -25,7 +25,8 @@ if numel(pair_weights) ~= npairs
     error('ISDF:HFValidationWeights', ...
         'pair_weights must contain one value per left-right pair.');
 end
-if size(space.product_mu, 2) ~= npairs
+if ~isfield(space, 'nleft') || ~isfield(space, 'nright') || ...
+        space.nleft * space.nright ~= npairs
     error('ISDF:HFValidationSpace', ...
         'ISDF coefficients do not match the supplied product space.');
 end
@@ -68,7 +69,7 @@ for ipair = 1:numel(selected)
     product_g = ifftn(reshape(product, fftgrid)) * normalization;
     product_g = product_g(idx_q);
     direct_values(ipair) = gather(real(sum(coulg .* abs(product_g).^2)));
-    c_rho = space.product_mu(:, column);
+    c_rho = isdf.product_coefficients(space, column);
     isdf_values(ipair) = gather(real(c_rho' * tilde_vq * c_rho));
 end
 

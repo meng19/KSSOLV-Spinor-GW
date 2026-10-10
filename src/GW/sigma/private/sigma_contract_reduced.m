@@ -59,7 +59,7 @@ for nn = 1:ctx.nbands
     if isfield(matrix_elements, 'coeff')
         coeff = matrix_elements.coeff(:, nn);
     else
-        coeff = matrix_elements.space.product_mu(:, nn);
+        coeff = isdf.product_coefficients(matrix_elements.space, nn);
     end
     [asx_loc, ach_loc, achx_loc_nn(block.in, nn), ...
         omega, iw_lda] = sigma_fullfreq(asx_loc, ach_loc, ...
@@ -194,7 +194,7 @@ function coeff = local_coefficients(matrix_elements, nbands)
 if isfield(matrix_elements, 'coeff')
     coeff = matrix_elements.coeff;
 else
-    coeff = matrix_elements.space.product_mu(:, 1:nbands);
+    coeff = isdf.product_coefficients(matrix_elements.space, 1:nbands);
 end
 end
 

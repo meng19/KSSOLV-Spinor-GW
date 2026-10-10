@@ -10,6 +10,6 @@ end
 space = isdf.build_space(left, right, idx_q, fftgrid, options);
 nleft = size(left{1}, 2);
 nright = size(right{1}, 2);
-gme = reshape(space.zeta_g * space.product_mu, ...
+gme = reshape(space.zeta_g * isdf.product_coefficients(space), ...
     numel(idx_q), nleft, nright);
 end
