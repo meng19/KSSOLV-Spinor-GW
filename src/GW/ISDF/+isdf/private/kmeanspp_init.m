@@ -6,8 +6,8 @@ ind_mu = zeros(rank_mu, 1);
 ind_mu(1) = randi(ngrid);
 for imu = 2:rank_mu
     centers = points(ind_mu(1:imu-1), :);
-    distance = distance_to_centers(points, centers);
-    min_distance = min(distance, [], 2);
+    [~, min_distance] = nearest_centers(points, centers, ...
+        options.kmeans_distance_block_elements);
     score = min_distance .* weight;
     score(ind_mu(1:imu-1)) = 0;
     if strcmpi(options.init, 'kmeans++')

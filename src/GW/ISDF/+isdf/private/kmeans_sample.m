@@ -33,8 +33,8 @@ end
 last_ind = ind_mu(:);
 new_ind = last_ind;
 for iteration = 1:options.kmeans_max_iter %#ok<NASGU>
-    distance = distance_to_centers(points, points(last_ind, :));
-    [~, cluster_id] = min(distance, [], 2);
+    [cluster_id, ~] = nearest_centers(points, points(last_ind, :), ...
+        options.kmeans_distance_block_elements);
     for imu = 1:rank_mu
         cluster = find(cluster_id == imu);
         if isempty(cluster)

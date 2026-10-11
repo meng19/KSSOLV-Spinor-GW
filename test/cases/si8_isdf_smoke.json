@@ -18,7 +18,7 @@
       "output": "screened_w",
       "sample_method": "qrcp_randomized",
       "sample_precision": "double",
-      "interpolation_solver": "svd_whiten",
+      "interpolation_solver": "direct",
       "svd_cutoff": 1e-12,
       "svd_ratio": 0.75,
       "rank_ratio_vc": 12,
@@ -27,7 +27,9 @@
       "reduced_solver": "cauchy",
       "cauchy_froErr": 1e-6,
       "cauchy_MaxIter": 10,
-      "validate_hf_exchange": true
+      "validate_hf_exchange": true,
+      "product_gram_storage" : "stream",
+      "product_mu_storage": "lazy"
     }
   },
   "sigma": {
@@ -57,7 +59,8 @@
       "global_nn_space": true,
       "global_vn_space": true,
       "seed": 0,
-      "swap_left_right_nn" : true
+      "swap_left_right_nn" : true,
+      "product_mu_storage": "lazy"
     }
   }
 }

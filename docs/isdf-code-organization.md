@@ -176,3 +176,66 @@ matlab -wait -batch "run('test/ISDF/unit/test_ISDF_gpu_support.m')"
 - `sigma/private`：后续可把 exact static CH 公共逻辑继续提取成 helper。
 - `build_space.m`：默认参数已拆到 `private/set_defaults.m`，后续可补更细的 option schema 测试。
 - `screened_w.m` 和 `stable_solve.m`：仍有很小的 local cleanup helper，保留是为了让 warning cleanup 靠近调用点。
+
+## 7. 论文中的整体技术实现表述
+
+本节将代码组织映射为可在论文“方法实现”章节中说明的计算流程。它覆盖
+GW 主流程、ISDF 降标度和工程实现；ISDF 数学推导及流式内存实现见
+`docs/isdf-interpolation-derivation.md`。
+
+### 7.1 端到端计算架构
+
+```text
+QE/KSSOLV 数据读取
+  → gw_setup：网格、对称性与公共运行时数据
+  → epsilon：direct G-space 或 ISDF reduced-basis 屏蔽响应
+  → sigma：全空间或 reduced screened-W 自能收缩
+  → quasi_energy：准粒子能量
+```
+
+- `src/GW/read/` 读入 QE 或 KSSOLV 波函数、能带与相关输入；
+- `src/GW/common/runtime/gw_setup.m` 准备公共 GW 数据；
+- `epsilon.m` 与 `sigma.m` 分别拥有 q/k/spin 和 band/k/q/spin 的共享
+  主循环；
+- `epsilon_ops.m` 与 `sigma_ops.m` 在进入循环前选择 direct、
+  `matrix_elements` 或 `reduced_basis` 算子，避免在内层循环重复分支；
+- `gw_run_json.m` 是可复现生产计算的 JSON 入口。
+
+### 7.2 epsilon 与 sigma 的分层实现
+
+epsilon 的 `epsilon_full_*` 文件构造 conventional G-space 响应，适合作为
+物理收敛和 ISDF 误差的参考。`epsilon_reduced_*` 文件在 VC 产品空间中
+调用 `isdf.build_space`、`isdf.polarizability` 和 `isdf.screened_w`，形成
+约化的 screened interaction。约化极化率通过 `comega_cstar.m` 调度：
+`comega_direct.m` 是显式占据--非占据带求和参考，`comega_cauchy.m` 是
+静态 Cauchy 降标度求解器。
+
+sigma 的 `sigma_matrix_elements.m` 构造 NN 或 VN 产品空间；
+`sigma_contract_full.m` 采用完整介电逆矩阵，
+`sigma_contract_reduced.m` 将 screened interaction 投影到目标 ISDF
+空间并完成 SEX、COH 与交换相关收缩。NN 是目标带--全部求和带空间，VN
+是目标带--占据带空间；后者可在占据带较少时降低裸交换成本。
+
+### 7.3 性能与可扩展性策略
+
+| 策略 | 实现位置 | 作用与代价 |
+| --- | --- | --- |
+| 随机 QRCP / K-means | `+isdf/private/*sample*.m` | 减少显式带对矩阵构造；随机采样需固定种子并做 rank 收敛。 |
+| 实空间波函数缓存 | `real_components.m` | 减少 epsilon/sigma 间重复逆 FFT；增加常驻内存。 |
+| global NN/VN 空间 | `sigma_matrix_elements.m` | 多目标带复用采样和辅助基；全局空间更占内存。 |
+| screened-kernel 缓存 | `screened_kernel_cache.m` | 避免相同目标空间的重复 W 投影；受字节预算控制。 |
+| GPU 数组 | epsilon/sigma/ISDF 核函数 | 利用 GPU 线性代数；GPU 显存也必须纳入 rank 与缓存预算。 |
+| 惰性 (P_\mu) 与流式 (C_1) | `product_coefficients.m`、`product_gram.m` | 避免两个大显式矩阵；增加分块循环开销。 |
+
+### 7.4 验证与可复现性
+
+论文应将物理收敛和算法收敛分开报告。前者包括带数、介电 cutoff、q 点
+网格和 Coulomb 截断；后者包括 VC/NN/VN rank ratio、采样方法、随机种子、
+Cauchy 容差与内存阈值。建议先对可承受的体系使用 `isdf.enable=false` 或
+ISDF direct 求解器建立参考，再报告 reduced-basis 结果相对该参考的
+epsilon、SX、CH 和准粒子能量误差。
+
+`test/ISDF/unit/` 覆盖产品空间、矩阵元、约化极化率、screened interaction、
+GPU 与上下文结构；`test/ISDF/validation/` 提供 AgBr 和 MoS2 的端到端
+验证。除物理结果外，论文还应记录 MATLAB 版本、GPU 型号、输入波函数
+来源、所有 ISDF 参数、随机种子及缓存/流式开关。

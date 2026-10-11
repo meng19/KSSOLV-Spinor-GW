@@ -116,6 +116,13 @@ assert(kmeans_error < 1e-10, ...
     'K-means component ISDF differs from direct FFT: %.3e', kmeans_error);
 assert(~isfield(kmeans_space, 'products'));
 
+blocked_kmeans_options = kmeans_options;
+blocked_kmeans_options.kmeans_distance_block_elements = 1;
+blocked_kmeans_space = isdf.build_space(left, right, ...
+    idx_q, fftgrid, blocked_kmeans_options);
+assert(isequal(blocked_kmeans_space.ind_mu, kmeans_space.ind_mu), ...
+    'Blocked K-means selected different interpolation points.');
+
 stream_options = kmeans_options;
 stream_options.product_gram_storage = 'stream';
 stream_options.product_gram_block_elements = nfft;

@@ -1220,3 +1220,89 @@ sig.isdf.warn_ill_conditioned = true;
 ```
 
 这样会显示更明确的 ISDF 条件数警告。
+
+## 15. 自旋器乘积空间的实现
+
+前文用标量波函数说明推导。实际代码将每个波函数表示为多个自旋器分量，
+由 `src/GW/ISDF/+isdf/real_components.m` 逐分量逆 FFT 到实空间。若共有
+$N_s$ 个分量，参与 ISDF 的密度型乘积为
+
+$$
+P(\mathbf r,ij)=
+\sum_{s=1}^{N_s}
+\psi_{i,s}^*(\mathbf r)\psi_{j,s}(\mathbf r).
+$$
+
+因此 `component_products.m` 中的显式产品、`component_weight.m` 中的
+插值点权重以及 `product_gram.m` 中的 Gram 矩阵，都对分量指标求和。对
+两个分量指标 $s,t$，$C_1$ 的实现等价于
+
+$$
+C_1(r,\mu)=
+\sum_{s,t}
+\left[\sum_i\psi_{i,s}^*(r)\psi_{i,t}(r_\mu)\right]
+\left[\sum_j\psi_{j,s}(r)\psi_{j,t}^*(r_\mu)\right].
+$$
+
+这正是 `product_gram.m` 中两个矩阵乘法的逐元素乘积及其分量双重循环。
+该写法使标量情形成为 $N_s=1$ 的特例，同时保留自旋器分量的交叉项。
+
+## 16. 大体系的惰性系数与流式 Gram 实现
+
+对大量左右能带，两个显式对象可能主导内存：
+
+$$
+P_\mu\in\mathbb C^{N_\mu\times(N_\mathrm{left}N_\mathrm{right})},
+\qquad
+C_1\in\mathbb C^{N_\mathrm{grid}\times N_\mu}.
+$$
+
+### 16.1 惰性带对系数
+
+`product_mu_storage` 默认为 `auto`。当
+
+```text
+rank * nleft * nright > product_mu_max_elements
+```
+
+时，`build_space` 不常驻保存完整 $P_\mu$。新的
+`isdf.product_coefficients` 仅为当前所需带对列重建
+
+$$
+P_\mu(:,ij)=
+\sum_s\psi_{i,s}^*(r_\mu)\psi_{j,s}(r_\mu).
+$$
+
+sigma 的 global NN 空间因而可以复用同一套插值点和辅助基，同时每个目标
+带只生成其对应的 $N_\mu\times N_\mathrm{bands}$ 系数块，而不是生成
+$N_\mu\times N_\mathrm{bands}^2$ 的完整矩阵。
+
+### 16.2 流式 (C_1) 与 G 空间求解
+
+`product_gram_storage` 也默认为 `auto`。当
+
+```text
+ngrid * rank > product_gram_max_elements
+```
+
+且 `interpolation_solver='direct'` 时，程序按插值点列块构造
+$C_1(:,\mu_\mathrm{block})$，立即使用与原路径相同的 `ifftn` 变换并仅
+保留 `idx_q` 对应的 G 点。随后在 G 空间求解：
+
+$$
+Z_G=\mathcal F^{-1}(C_1)C_2^{-1}.
+$$
+
+该交换次序成立，是因为 FFT 只作用在实空间行指标上，而 $C_2^{-1}$ 仅
+作用在插值点列指标上：
+
+$$
+\mathcal F^{-1}(C_1C_2^{-1})
+=\mathcal F^{-1}(C_1)C_2^{-1}.
+$$
+
+实现中 `product_gram_block_elements` 限制每个实空间块中的复数元素数，
+默认值为 $2\times10^6$。流式方法避免完整 $C_1$，但 $C_2$ 与最终
+`zeta_g` 仍需要常驻；因此它降低峰值内存而不消除 rank 对计算规模的控制。
+`svd_whiten` 目前仍需完整 $C_1$，大体系流式路径应使用 `direct` 插值
+求解器。

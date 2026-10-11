@@ -84,6 +84,16 @@ end
 if ~isfield(options, 'kmeans_max_iter') || isempty(options.kmeans_max_iter)
     options.kmeans_max_iter = 100;
 end
+if ~isfield(options, 'kmeans_distance_block_elements') || ...
+        isempty(options.kmeans_distance_block_elements)
+    % Bound the temporary (point block)-by-(center) distance matrix.
+    options.kmeans_distance_block_elements = 2e7;
+end
+if ~(isscalar(options.kmeans_distance_block_elements) && ...
+        options.kmeans_distance_block_elements >= 1)
+    error('ISDF:KmeansDistanceBlockElements', ...
+        'kmeans_distance_block_elements must be a positive scalar.');
+end
 if ~isfield(options, 'random_oversampling') || isempty(options.random_oversampling)
     options.random_oversampling = 1.2;
 end

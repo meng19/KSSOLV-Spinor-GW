@@ -37,7 +37,7 @@ eps.isdf.enable = true;
 eps.isdf.algorithm = 'reduced_basis';
 eps.isdf.output = 'screened_w';
 eps.isdf.sample_method = 'kmeans';
-eps.isdf.rank_ratio = 8;
+eps.isdf.rank_ratio_vc = 8;
 % eps.isdf.rank = 28;
 eps.isdf.reduced_solver = 'direct';
 eps.isdf.seed = 0;
@@ -47,7 +47,7 @@ toc
 
 tic
 sig.nbnd = 29;
-sig.ndiag_min = sig.nbnd;
+sig.ndiag_min = sig.nbnd-3;
 sig.ndiag_max = sig.nbnd;
 sig.freq_dep = 2;
 sig.freq_dep_method = 2;
@@ -64,7 +64,10 @@ sig.precompute_wav = 0;
 sig.isdf.enable = true;
 sig.isdf.algorithm = 'reduced_basis';
 sig.isdf.sample_method = 'kmeans';
-sig.isdf.rank_ratio = 8;
+sig.isdf.rank_ratio_nn = 8;
+sig.isdf.exchange_space = 'vn';
+sig.isdf.global_nn_space = true;
+sig.isdf.reuse_nn_for_vn = true;
 % sig.isdf.rank = 28;
 sig.isdf.seed = 0;
 sig = sigma(eps, sig, sys, options, syms);
