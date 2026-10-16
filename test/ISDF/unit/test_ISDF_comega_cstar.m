@@ -92,3 +92,29 @@ assert(fallback_cauchy.info.fallback_count == 1);
 assert(isequal(fallback_cauchy.info.fallback_pages, true));
 fprintf('ISDF COmegaCstar fallback info test passed. fallback_count = %d\n', ...
     fallback_cauchy.info.fallback_count);
+
+% A static contour failure (for example, a metallic/overlapping band
+% selection) must use the exact reduced sum rather than return the failed
+% contour's zero placeholder.
+overlap_unocc = [-1.5; 2.0; 3.5; 5.0];
+static_overlap_direct = isdf.polarizability(space, ev_occ, overlap_unocc, ...
+    struct('method', 'direct'));
+static_overlap_cauchy = isdf.polarizability(space, ev_occ, overlap_unocc, ...
+    struct('method', 'cauchy', 'froErr', 1e-9, 'MaxIter', 12));
+static_overlap_error = norm( ...
+    static_overlap_cauchy.coeff(:) - static_overlap_direct.coeff(:)) / ...
+    max(1, norm(static_overlap_direct.coeff(:)));
+assert(static_overlap_error < 1e-12, ...
+    'Static Cauchy direct fallback mismatch: %.3e', static_overlap_error);
+assert(static_overlap_cauchy.info.fallback_count == 1);
+
+% Hitting MaxIter without meeting froErr is also a failed Cauchy page; it
+% must not be silently accepted as converged.
+limited_cauchy = isdf.polarizability(space, ev_occ, ev_unocc, ...
+    struct('method', 'cauchy', 'froErr', 1e-30, 'MaxIter', 1));
+limited_error = norm(limited_cauchy.coeff(:) - direct(:)) / ...
+    max(1, norm(direct(:)));
+assert(limited_error < 1e-12, ...
+    'MaxIter Cauchy direct fallback mismatch: %.3e', limited_error);
+assert(limited_cauchy.info.fallback_count == 1);
+fprintf('ISDF COmegaCstar static/MaxIter fallback tests passed.\n');

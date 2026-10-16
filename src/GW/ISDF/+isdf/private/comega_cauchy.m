@@ -34,8 +34,20 @@ chunks = local_coefficient_chunks(left, right);
 for ifreq = 1:nfreq
     omega = freq(ifreq);
     if omega == 0
-        [result(:, :, ifreq), relative_errors(ifreq), iterations(ifreq)] = ...
+        [page, page_error, page_iter, page_ok] = ...
             local_cauchy_resolvent(chunks, ev_occ, ev_unocc, options);
+        if page_ok
+            result(:, :, ifreq) = page;
+            relative_errors(ifreq) = page_error;
+            iterations(ifreq) = page_iter;
+        else
+            % A zero/negative gap cannot be enclosed by this contour.  Do
+            % not silently return the zero placeholder from the failed
+            % contour construction; retain the exact reduced summation.
+            result(:, :, ifreq) = local_direct_resolvent( ...
+                chunks, ev_occ, ev_unocc);
+            fallback_direct(ifreq) = true;
+        end
         continue;
     end
 
@@ -50,10 +62,33 @@ for ifreq = 1:nfreq
         relative_errors(ifreq) = max(plus_error, minus_error);
         iterations(ifreq) = max(plus_iter, minus_iter);
     else
-        direct_page = comega_direct(left, right, ev_occ, ev_unocc, omega);
-        result(:, :, ifreq) = direct_page(:, :, 1);
-        relative_errors(ifreq) = 0;
-        iterations(ifreq) = 0;
+        % Keep a successfully converged half of the resolvent identity.
+        % For real positive frequencies the minus contour commonly remains
+        % valid while the plus contour crosses a resonance, so replacing
+        % only the failed half avoids an unnecessary exact contraction.
+        if plus_ok
+            plus_page_exact = plus_page;
+            page_plus_error = plus_error;
+            page_plus_iter = plus_iter;
+        else
+            plus_page_exact = local_direct_resolvent( ...
+                chunks, ev_occ, ev_unocc - omega);
+            page_plus_error = 0;
+            page_plus_iter = 0;
+        end
+        if minus_ok
+            minus_page_exact = minus_page;
+            page_minus_error = minus_error;
+            page_minus_iter = minus_iter;
+        else
+            minus_page_exact = local_direct_resolvent( ...
+                chunks, ev_occ, ev_unocc + omega);
+            page_minus_error = 0;
+            page_minus_iter = 0;
+        end
+        result(:, :, ifreq) = 0.5 * (plus_page_exact + minus_page_exact);
+        relative_errors(ifreq) = max(page_plus_error, page_minus_error);
+        iterations(ifreq) = max(page_plus_iter, page_minus_iter);
         fallback_direct(ifreq) = true;
     end
 end
@@ -112,6 +147,9 @@ end
 previous = [];
 gamma_previous = [];
 relative_error = inf;
+% ``ok`` means both a valid contour and successful quadrature convergence.
+% Leaving it true after MaxIter would silently accept an inaccurate page.
+ok = false;
 for iteration = 1:options.MaxIter
     npoints = 2^(iteration + 3);
     if isempty(previous)
@@ -137,12 +175,27 @@ for iteration = 1:options.MaxIter
         relative_error = gather_if_gpu( ...
             norm(result - previous, 'fro') / max(1, norm(result, 'fro')));
         if relative_error <= options.froErr
+            ok = true;
             return;
         end
     end
     previous = result;
     gamma_previous = gamma;
 end
+end
+
+function value = local_direct_resolvent(chunks, ev_occ, ev_unocc)
+% Exact reduced pair summation, evaluated through the cached P/Q chunks.
+% This is algebraically identical to comega_direct for one resolvent page,
+% but avoids reconstructing one real-space product at a time.
+ev_occ_work = ev_occ;
+ev_unocc_work = ev_unocc;
+if isa(chunks(1).P, 'gpuArray')
+    ev_occ_work = gpuArray(ev_occ_work);
+    ev_unocc_work = gpuArray(ev_unocc_work);
+end
+gamma = 1 ./ (ev_occ_work(:) - ev_unocc_work(:).');
+value = local_folded_apply(chunks, gamma);
 end
 
 function value = local_folded_apply(chunks, gamma)
