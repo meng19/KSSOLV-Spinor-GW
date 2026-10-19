@@ -196,6 +196,8 @@ and frequency-dependent runs, not the usual memory-saving option.
 | `adaptive_rank_tol`, `adaptive_rank_step`, `adaptive_rank_max`, `adaptive_validation_rank` | advanced | Controls adaptive-rank tolerance, increment, maximum rank, and randomized validation sketch.  Leave unset unless `adaptive_rank_enable=true`. |
 | `reduced_solver` | `cauchy` (default), `direct` | Solver for the reduced polarizability.  `cauchy` is the efficient static approximation/iteration and falls back to direct pages when needed; `direct` is the reference sum and is useful for validating Cauchy settings. |
 | `cauchy_froErr`, `cauchy_MaxIter` | `1e-8`, `12` | Requested Cauchy relative Frobenius error and iteration cap.  Tighten/increase only if its fallback summary or a direct comparison shows a need. |
+| `cauchy_coefficient_storage` | `auto`, `full`, `stream` | Controls whether Cauchy pair coefficients are cached.  `auto` caches only when the complete P/Q cache fits `cauchy_coefficient_cache_bytes`; otherwise it regenerates one pair block at a time.  Use `stream` for memory-limited large systems. |
+| `cauchy_coefficient_cache_bytes`, `cauchy_coefficient_block_bytes` | `5.12e8`, `1.28e8` | Byte limits for the full P/Q cache and a streamed P/Q block.  Lower the block limit when memory is tight; larger blocks reduce loop overhead. |
 
 `epsilon.isdf.output` applies only to `algorithm="reduced_basis"`:
 

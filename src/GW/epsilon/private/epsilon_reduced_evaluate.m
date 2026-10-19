@@ -32,6 +32,16 @@ solver.froErr = ctx.eps.isdf.cauchy_froErr;
 solver.MaxIter = ctx.eps.isdf.cauchy_MaxIter;
 solver.freq = ctx.pol.freq / ctx.ryd;
 solver.progress = local_progress_slice(block, progress_work, 0.60, 0.95);
+% Keep the Cauchy coefficient cache policy under the public ISDF options.
+% Missing fields intentionally retain comega_cauchy's internal defaults.
+cauchy_fields = {'cauchy_coefficient_storage', ...
+    'cauchy_coefficient_cache_bytes', 'cauchy_coefficient_block_bytes'};
+for ifield = 1:numel(cauchy_fields)
+    field = cauchy_fields{ifield};
+    if isfield(ctx.eps.isdf, field)
+        solver.(field) = ctx.eps.isdf.(field);
+    end
+end
 gw_timer('start', 'Epsilon polarizability');
 polar = isdf.polarizability( ...
     space, block.ev_occ, block.ev_unocc, solver);

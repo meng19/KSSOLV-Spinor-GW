@@ -30,12 +30,12 @@ result = complex(zeros(nmu, nmu, nfreq, 'like', left{1}));
 relative_errors = zeros(1, nfreq);
 iterations = zeros(1, nfreq);
 fallback_direct = false(1, nfreq);
-chunks = local_coefficient_chunks(left, right);
+chunks = local_coefficient_chunks(left, right, options);
 for ifreq = 1:nfreq
     omega = freq(ifreq);
     if omega == 0
         [page, page_error, page_iter, page_ok] = ...
-            local_cauchy_resolvent(chunks, ev_occ, ev_unocc, options);
+            local_cauchy_resolvent(chunks, left, right, ev_occ, ev_unocc, options);
         if page_ok
             result(:, :, ifreq) = page;
             relative_errors(ifreq) = page_error;
@@ -45,7 +45,7 @@ for ifreq = 1:nfreq
             % not silently return the zero placeholder from the failed
             % contour construction; retain the exact reduced summation.
             result(:, :, ifreq) = local_direct_resolvent( ...
-                chunks, ev_occ, ev_unocc);
+                chunks, left, right, ev_occ, ev_unocc);
             fallback_direct(ifreq) = true;
         end
         continue;
@@ -53,10 +53,10 @@ for ifreq = 1:nfreq
 
     [plus_page, plus_error, plus_iter, plus_ok] = ...
         local_cauchy_resolvent( ...
-        chunks, ev_occ, ev_unocc - omega, options);
+        chunks, left, right, ev_occ, ev_unocc - omega, options);
     [minus_page, minus_error, minus_iter, minus_ok] = ...
         local_cauchy_resolvent( ...
-        chunks, ev_occ, ev_unocc + omega, options);
+        chunks, left, right, ev_occ, ev_unocc + omega, options);
     if plus_ok && minus_ok
         result(:, :, ifreq) = 0.5 * (plus_page + minus_page);
         relative_errors(ifreq) = max(plus_error, minus_error);
@@ -72,7 +72,7 @@ for ifreq = 1:nfreq
             page_plus_iter = plus_iter;
         else
             plus_page_exact = local_direct_resolvent( ...
-                chunks, ev_occ, ev_unocc - omega);
+                chunks, left, right, ev_occ, ev_unocc - omega);
             page_plus_error = 0;
             page_plus_iter = 0;
         end
@@ -82,7 +82,7 @@ for ifreq = 1:nfreq
             page_minus_iter = minus_iter;
         else
             minus_page_exact = local_direct_resolvent( ...
-                chunks, ev_occ, ev_unocc + omega);
+                chunks, left, right, ev_occ, ev_unocc + omega);
             page_minus_error = 0;
             page_minus_iter = 0;
         end
@@ -96,51 +96,78 @@ relative_error = max(relative_errors);
 iteration = max(iterations);
 end
 
-function chunks = local_coefficient_chunks(left, right)
-% Fold the component sum into nmu-by-(Nv*Nc) coefficient matrices, chunked
-% over the conduction index so the stored working set stays bounded.
+function chunks = local_coefficient_chunks(left, right, options)
+% Describe pair-column chunks; cache their P/Q values only when small.
 nmu = size(left{1}, 1);
-nv = size(left{1}, 2);
-nc = size(right{1}, 2);
-% Each stored column pair costs 2 * 16 * nmu bytes (one P and one Q column).
-max_chunk_columns = max(1, floor(5.12e8 / (32 * nmu)));
-jchunk = max(1, floor(max_chunk_columns / nv));
+npairs = size(left{1}, 2) * size(right{1}, 2);
+options = local_coefficient_options(options);
+% One pair column stores P and Q, i.e. 2 complex-double vectors of nmu.
+pair_block = max(1, floor(options.cauchy_coefficient_block_bytes / ...
+    max(1, 32 * nmu)));
+cache_all = local_cache_coefficients(options, nmu, npairs);
 chunks = struct('P', {}, 'Q', {}, 'first', {}, 'last', {});
-for jfirst = 1:jchunk:nc
-    jlast = min(nc, jfirst + jchunk - 1);
-    P = complex(zeros(nmu, nv * (jlast - jfirst + 1), 'like', left{1}));
-    Q = complex(zeros(nmu, nv * (jlast - jfirst + 1), 'like', right{1}));
-    for ic = jfirst:jlast
-        local_columns = (ic - jfirst) * nv + (1:nv);
-        P_slice = complex(zeros(nmu, nv, 'like', left{1}));
-        Q_slice = complex(zeros(nmu, nv, 'like', right{1}));
-        for icomponent = 1:numel(left)
-            P_slice = P_slice + bsxfun(@times, conj(left{icomponent}), ...
-                right{icomponent}(:, ic));
-            Q_slice = Q_slice + bsxfun(@times, left{icomponent}, ...
-                conj(right{icomponent}(:, ic)));
-        end
-        P(:, local_columns) = P_slice;
-        Q(:, local_columns) = Q_slice;
+for first = 1:pair_block:npairs
+    last = min(npairs, first + pair_block - 1);
+    chunk = struct('P', [], 'Q', [], 'first', first, 'last', last);
+    if cache_all
+        [chunk.P, chunk.Q] = local_chunk_coefficients(chunk, left, right);
     end
-    chunks(end + 1) = struct('P', {P}, 'Q', {Q}, ...
-        'first', (jfirst - 1) * nv + 1, 'last', jlast * nv); %#ok<AGROW>
+    chunks(end + 1) = chunk; %#ok<AGROW>
+end
+end
+
+function options = local_coefficient_options(options)
+if ~isfield(options, 'cauchy_coefficient_storage') || ...
+        isempty(options.cauchy_coefficient_storage)
+    options.cauchy_coefficient_storage = 'auto';
+end
+options.cauchy_coefficient_storage = lower( ...
+    char(options.cauchy_coefficient_storage));
+if ~any(strcmp(options.cauchy_coefficient_storage, {'auto', 'full', 'stream'}))
+    error('ISDF:CauchyCoefficientStorage', ...
+        'cauchy_coefficient_storage must be ''auto'', ''full'', or ''stream''.');
+end
+if ~isfield(options, 'cauchy_coefficient_cache_bytes') || ...
+        isempty(options.cauchy_coefficient_cache_bytes)
+    options.cauchy_coefficient_cache_bytes = 5.12e8;
+end
+if ~isfield(options, 'cauchy_coefficient_block_bytes') || ...
+        isempty(options.cauchy_coefficient_block_bytes)
+    options.cauchy_coefficient_block_bytes = 1.28e8;
+end
+if ~(isscalar(options.cauchy_coefficient_cache_bytes) && ...
+        options.cauchy_coefficient_cache_bytes >= 1 && ...
+        isscalar(options.cauchy_coefficient_block_bytes) && ...
+        options.cauchy_coefficient_block_bytes >= 1)
+    error('ISDF:CauchyCoefficientBytes', ...
+        'Cauchy coefficient byte limits must be positive scalars.');
+end
+end
+
+function tf = local_cache_coefficients(options, nmu, npairs)
+switch options.cauchy_coefficient_storage
+    case 'full'
+        tf = true;
+    case 'stream'
+        tf = false;
+    otherwise
+        tf = 32 * nmu * npairs <= options.cauchy_coefficient_cache_bytes;
 end
 end
 
 function [result, relative_error, iteration, ok] = local_cauchy_resolvent( ...
-    chunks, ev_occ, ev_unocc, options)
+    chunks, left, right, ev_occ, ev_unocc, options)
 [center, radius, ok] = local_contour(ev_occ, ev_unocc);
-nmu = size(chunks(1).P, 1);
+nmu = size(left{1}, 1);
 if ~ok
-    result = complex(zeros(nmu, nmu, 'like', chunks(1).P));
+    result = complex(zeros(nmu, nmu, 'like', left{1}));
     relative_error = inf;
     iteration = 0;
     return;
 end
 ev_occ_work = ev_occ;
 ev_unocc_work = ev_unocc;
-if isa(chunks(1).P, 'gpuArray')
+if isa(left{1}, 'gpuArray')
     ev_occ_work = gpuArray(ev_occ_work);
     ev_unocc_work = gpuArray(ev_unocc_work);
 end
@@ -170,7 +197,7 @@ for iteration = 1:options.MaxIter
     unocc_weight = 1 ./ (z(:) - ev_unocc_work(:).');   % nnodes-by-Nc
     gamma = gamma + occ_weight.' * ...
         (unocc_weight .* (radius * exp_theta(:) / npoints));
-    result = local_folded_apply(chunks, gamma);
+    result = local_folded_apply(chunks, gamma, left, right);
     if ~isempty(previous)
         relative_error = gather_if_gpu( ...
             norm(result - previous, 'fro') / max(1, norm(result, 'fro')));
@@ -184,30 +211,49 @@ for iteration = 1:options.MaxIter
 end
 end
 
-function value = local_direct_resolvent(chunks, ev_occ, ev_unocc)
+function value = local_direct_resolvent(chunks, left, right, ev_occ, ev_unocc)
 % Exact reduced pair summation, evaluated through the cached P/Q chunks.
 % This is algebraically identical to comega_direct for one resolvent page,
 % but avoids reconstructing one real-space product at a time.
 ev_occ_work = ev_occ;
 ev_unocc_work = ev_unocc;
-if isa(chunks(1).P, 'gpuArray')
+if isa(left{1}, 'gpuArray')
     ev_occ_work = gpuArray(ev_occ_work);
     ev_unocc_work = gpuArray(ev_unocc_work);
 end
 gamma = 1 ./ (ev_occ_work(:) - ev_unocc_work(:).');
-value = local_folded_apply(chunks, gamma);
+value = local_folded_apply(chunks, gamma, left, right);
 end
 
-function value = local_folded_apply(chunks, gamma)
-% result = P*diag(gamma(:))*Q' accumulated over the stored chunks.  The
-% column ranges of each chunk match the column-major ordering of gamma.
+function value = local_folded_apply(chunks, gamma, left, right)
+% Accumulate P*diag(gamma(:))*Q'; rebuild streamed chunks one at a time.
 gamma_row = reshape(gamma, 1, []);
-value = complex(zeros(size(chunks(1).P, 1), size(chunks(1).P, 1), ...
-    'like', chunks(1).P));
+value = complex(zeros(size(left{1}, 1), size(left{1}, 1), ...
+    'like', left{1}));
 for ichunk = 1:numel(chunks)
-    scaled = chunks(ichunk).P .* gamma_row( ...
+    [P, Q] = local_chunk_coefficients(chunks(ichunk), left, right);
+    scaled = P .* gamma_row( ...
         chunks(ichunk).first:chunks(ichunk).last);
-    value = value + scaled * chunks(ichunk).Q.';
+    value = value + scaled * Q.';
+end
+end
+
+function [P, Q] = local_chunk_coefficients(chunk, left, right)
+if ~isempty(chunk.P)
+    P = chunk.P;
+    Q = chunk.Q;
+    return;
+end
+nmu = size(left{1}, 1);
+nv = size(left{1}, 2);
+columns = chunk.first:chunk.last;
+iv = mod(columns - 1, nv) + 1;
+ic = floor((columns - 1) / nv) + 1;
+P = complex(zeros(nmu, numel(columns), 'like', left{1}));
+Q = complex(zeros(nmu, numel(columns), 'like', right{1}));
+for icomponent = 1:numel(left)
+    P = P + conj(left{icomponent}(:, iv)) .* right{icomponent}(:, ic);
+    Q = Q + left{icomponent}(:, iv) .* conj(right{icomponent}(:, ic));
 end
 end
 
