@@ -1247,7 +1247,7 @@ $$
 这正是 `product_gram.m` 中两个矩阵乘法的逐元素乘积及其分量双重循环。
 该写法使标量情形成为 $N_s=1$ 的特例，同时保留自旋器分量的交叉项。
 
-## 16. 大体系的惰性系数与流式 Gram 实现
+## 16. 大体系的流式系数与流式 Gram 实现
 
 对大量左右能带，两个显式对象可能主导内存：
 
@@ -1257,15 +1257,16 @@ P_\mu\in\mathbb C^{N_\mu\times(N_\mathrm{left}N_\mathrm{right})},
 C_1\in\mathbb C^{N_\mathrm{grid}\times N_\mu}.
 $$
 
-### 16.1 惰性带对系数
+### 16.1 流式带对系数
 
-`product_mu_storage` 默认为 `auto`。当
+`product_mu_storage` 默认为 `full`，以获得最高吞吐。内存受限计算可显式设为
+`auto`；当
 
 ```text
 rank * nleft * nright > product_mu_max_elements
 ```
 
-时，`build_space` 不常驻保存完整 $P_\mu$。新的
+时，`build_space` 选择 `stream`，不常驻保存完整 $P_\mu$。新的
 `isdf.product_coefficients` 仅为当前所需带对列重建
 
 $$
@@ -1279,18 +1280,18 @@ $N_\mu\times N_\mathrm{bands}^2$ 的完整矩阵。
 
 ### 16.2 流式 (C_1) 与 G 空间求解
 
-`product_gram_storage` 也默认为 `auto`。当
+`product_gram_storage` 默认为 `full`。内存受限计算可显式设为 `auto`；当
 
 ```text
 ngrid * rank > product_gram_max_elements
 ```
 
 且 `interpolation_solver='direct'` 时，程序按插值点列块构造
-$C_1(:,\mu_\mathrm{block})$，立即使用与原路径相同的 `ifftn` 变换并仅
+$C_1(:,\mu_\mathrm{block})$，立即使用与原路径相同的 `fftn/N_\mathrm{grid}` 变换并仅
 保留 `idx_q` 对应的 G 点。随后在 G 空间求解：
 
 $$
-Z_G=\mathcal F^{-1}(C_1)C_2^{-1}.
+Z_G=\mathcal F(C_1)C_2^{-1}.
 $$
 
 该交换次序成立，是因为 FFT 只作用在实空间行指标上，而 $C_2^{-1}$ 仅

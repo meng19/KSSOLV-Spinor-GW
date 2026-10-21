@@ -3,7 +3,8 @@ function [cluster_id, min_distance] = nearest_centers( ...
 %NEAREST_CENTERS Assign points without materializing all point-center distances.
 
 if nargin < 3 || isempty(block_elements)
-    block_elements = 2e7;
+    error('ISDF:KmeansDistanceBlockElements', ...
+        'block_elements must be supplied by ISDF set_defaults.');
 end
 npoints = size(points, 1);
 ncenters = size(centers, 1);
@@ -13,7 +14,7 @@ end
 
 % DISTANCE_TO_CENTERS creates block_rows*ncenters real values.  Bound that
 % temporary explicitly; the output vectors have only npoints entries.
-block_rows = max(1, floor(block_elements / ncenters));
+block_rows = min(npoints, max(1, floor(block_elements / ncenters)));
 cluster_id = zeros(npoints, 1);
 min_distance = zeros(npoints, 1, 'like', real(points(:, 1)));
 for first_point = 1:block_rows:npoints

@@ -1,16 +1,6 @@
 function [x, info] = stable_solve(a, b, options)
 %STABLE_SOLVE Solve x*b = a with an ISDF-aware fallback.
 
-if nargin < 3 || isempty(options)
-    options = struct();
-end
-if ~isfield(options, 'rcond_tol') || isempty(options.rcond_tol)
-    options.rcond_tol = 1e-12;
-end
-if ~isfield(options, 'warn_ill_conditioned') || isempty(options.warn_ill_conditioned)
-    options.warn_ill_conditioned = false;
-end
-
 info = struct();
 b_condition = gather_if_gpu(b);
 if size(b, 1) == size(b, 2)

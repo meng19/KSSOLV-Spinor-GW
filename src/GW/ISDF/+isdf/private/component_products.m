@@ -41,7 +41,8 @@ if nargin < 5 || isempty(sample_precision)
     sample_precision = 'double';
 end
 if nargin < 6 || isempty(block_elements)
-    block_elements = 2e6;
+    error('ISDF:ProjectionBlockElements', ...
+        'block_elements must be supplied by ISDF set_defaults.');
 end
 if isa(left{1}, 'gpuArray') && ~isempty(projection) && ...
         ~isa(projection, 'gpuArray')

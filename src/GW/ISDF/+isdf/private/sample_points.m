@@ -22,7 +22,8 @@ end
 switch lower(options.sample_method)
     case 'qrcp'
         local_progress(options, 0.06, 'sampling full products');
-        products = component_products(left, right, [], []);
+        products = component_products(left, right, [], [], ...
+            options.sample_precision, options.projection_block_elements);
         if options.adaptive_rank_enable
             local_progress(options, 0.28, 'sampling adaptive QRCP');
             [ind_mu, adaptive_state] = adaptive_qrcp_sample(products, options);

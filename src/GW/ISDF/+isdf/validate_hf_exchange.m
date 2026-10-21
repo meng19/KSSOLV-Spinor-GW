@@ -14,6 +14,8 @@ end
 if ~iscell(right)
     right = {right};
 end
+options = set_defaults(options, size(left{1}, 2), size(right{1}, 2), ...
+    size(left{1}, 1), fftgrid);
 if numel(left) ~= numel(right)
     error('ISDF:HFValidationComponents', ...
         'left and right must have the same number of spinor components.');
@@ -35,7 +37,7 @@ if size(space.zeta_g, 1) ~= numel(idx_q) || numel(coulg) ~= numel(idx_q)
         'idx_q, coulg, and space.zeta_g must have the same G dimension.');
 end
 
-max_pairs = local_option(options, 'validate_hf_exchange_max_pairs', Inf);
+max_pairs = options.validate_hf_exchange_max_pairs;
 if ~(isnumeric(max_pairs) && isscalar(max_pairs) && max_pairs > 0)
     error('ISDF:HFValidationMaxPairs', ...
         'validate_hf_exchange_max_pairs must be a positive scalar.');
@@ -45,13 +47,13 @@ if isfinite(max_pairs) && numel(selected) > max_pairs
     selected = selected(1:floor(max_pairs));
 end
 weights = pair_weights(selected).';
-label = local_option(options, 'validate_hf_exchange_label', 'HF exchange');
+label = options.validate_hf_exchange_label;
 
 coulg = coulg(:)/1103.71209453158;
 idx_q = idx_q(:);
 direct_values = zeros(1, numel(selected));
 isdf_values = zeros(1, numel(selected));
-normalization = 1103.71209453158; % Must match private/zeta_to_g.m.
+normalization = prod(fftgrid); % Must match private/zeta_to_g.m.
 % Match the reference ISDF HF validator explicitly: c_rho' * tildeVq *
 % c_rho.  This is algebraically identical to sum_G v_G |Z*c_rho|^2,
 % but retains the reduced Coulomb matrix needed for like-for-like timing
@@ -66,7 +68,7 @@ for ipair = 1:numel(selected)
         product = product + conj(left{icomponent}(:, ileft)) .* ...
             right{icomponent}(:, iright);
     end
-    product_g = ifftn(reshape(product, fftgrid)) * normalization;
+    product_g = fftn(reshape(product, fftgrid)) / normalization;
     product_g = product_g(idx_q);
     direct_values(ipair) = gather(real(sum(coulg .* abs(product_g).^2)));
     c_rho = isdf.product_coefficients(space, column);
@@ -87,12 +89,4 @@ fprintf(['ISDF %s validation: direct = %.12e, ISDF = %.12e, ' ...
     'abs err = %.3e, rel err = %.3e (%d/%d weighted pairs)\n'], ...
     label, report.direct_energy, report.isdf_energy, abs(report.absolute_error), ...
     report.relative_error, report.pairs_checked, report.pairs_total);
-end
-
-function value = local_option(options, name, default_value)
-if isfield(options, name) && ~isempty(options.(name))
-    value = options.(name);
-else
-    value = default_value;
-end
 end

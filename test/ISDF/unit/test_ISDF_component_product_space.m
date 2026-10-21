@@ -133,18 +133,19 @@ stream_error = max(abs(stream_space.zeta_g(:) - kmeans_space.zeta_g(:)));
 assert(stream_error < 1e-10, ...
     'Streamed product Gram differs from the dense path: %.3e', stream_error);
 
-lazy_options = kmeans_options;
-lazy_options.product_mu_storage = 'lazy';
-lazy_space = isdf.build_space(left, right, idx_q, fftgrid, lazy_options);
-assert(isempty(lazy_space.product_mu));
-lazy_coeff = isdf.product_coefficients(lazy_space);
-assert(max(abs(lazy_coeff(:) - products(lazy_space.ind_mu, :))) < 1e-12);
-lazy_actual = lazy_space.zeta_g * lazy_coeff;
-lazy_error = max(abs(lazy_actual(:) - direct(:)));
-assert(lazy_error < 1e-10, ...
-    'Lazy component ISDF differs from direct FFT: %.3e', lazy_error);
-assert(max(abs(isdf.product_coefficients(lazy_space, [2, 5]) - ...
-    lazy_coeff(:, [2, 5])), [], 'all') < 1e-12);
+stream_coeff_options = kmeans_options;
+stream_coeff_options.product_mu_storage = 'stream';
+stream_coeff_space = isdf.build_space(left, right, idx_q, fftgrid, stream_coeff_options);
+assert(isempty(stream_coeff_space.product_mu));
+stream_coeff = isdf.product_coefficients(stream_coeff_space);
+expected_stream_coeff = products(stream_coeff_space.ind_mu, :);
+assert(max(abs(stream_coeff(:) - expected_stream_coeff(:))) < 1e-12);
+stream_coeff_actual = stream_coeff_space.zeta_g * stream_coeff;
+stream_coeff_error = max(abs(stream_coeff_actual(:) - direct(:)));
+assert(stream_coeff_error < 1e-10, ...
+    'Streamed component ISDF differs from direct FFT: %.3e', stream_coeff_error);
+assert(max(abs(isdf.product_coefficients(stream_coeff_space, [2, 5]) - ...
+    stream_coeff(:, [2, 5])), [], 'all') < 1e-12);
 
 explicit_add_options = kmeans_options;
 explicit_add_options.weight = 'add';
@@ -172,9 +173,9 @@ end
 
 fprintf(['Component package ISDF tests passed. qrcp = %.3e, ' ...
     'single = %.3e, randomized = %.3e, kmeans = %.3e, stream = %.3e, ' ...
-    'lazy = %.3e, cauchy = %.3e\n'], ...
+    'streamed coefficients = %.3e, cauchy = %.3e\n'], ...
     max_error, single_error, randomized_error, kmeans_error, stream_error, ...
-    lazy_error, relative_error);
+    stream_coeff_error, relative_error);
 
 % A single-component QRCP space must retain the legacy Gram solve.  Its
 % condition estimate is for P_mu*P_mu', rather than for rectangular P_mu.
@@ -241,6 +242,6 @@ assert(contains(build_source, ...
     '[ind_mu, products, adaptive_state] = sample_points(left, right, options);'), ...
     'build_space must reuse explicit products returned by sample_points.');
 explicit_builds = regexp(sample_source, ...
-    'component_products\(left, right, \[\], \[\]\)', 'match');
+    'component_products\(left, right, \[\], \[\]', 'match');
 assert(numel(explicit_builds) == 1, ...
     'The explicit component product matrix must be formed only once.');

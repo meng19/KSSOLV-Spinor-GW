@@ -4,6 +4,7 @@ function polar = polarizability(space, ev_occ, ev_unocc, options)
 if nargin < 4 || isempty(options)
     options = struct();
 end
+options = set_defaults(options);
 if isfield(space, 'left_mu_components') && ...
         isfield(space, 'right_mu_components')
     left_mu = space.left_mu_components;

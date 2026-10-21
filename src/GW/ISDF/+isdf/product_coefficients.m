@@ -1,7 +1,7 @@
 function coeff = product_coefficients(space, columns)
 %ISDF.PRODUCT_COEFFICIENTS Return selected ISDF band-pair coefficients.
 %   Coefficients are returned from the stored product_mu when available.
-%   Lazy spaces reconstruct only the requested columns from the component
+%   Streamed spaces reconstruct only the requested columns from the component
 %   values at interpolation points.  Product columns are left-band fastest.
 
 if nargin < 2 || isempty(columns)
@@ -18,8 +18,8 @@ if ~isempty(space.product_mu)
 end
 
 nmu = numel(space.ind_mu);
-block_size = max(1, floor(space.options.projection_block_elements / ...
-    max(1, nmu)));
+block_size = min(numel(columns), max(1, floor( ...
+    space.options.projection_block_elements / max(1, nmu))));
 reference = space.left_mu_components{1};
 coeff = complex(zeros(nmu, numel(columns), 'like', reference));
 for first = 1:block_size:numel(columns)

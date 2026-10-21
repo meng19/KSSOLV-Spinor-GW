@@ -23,68 +23,13 @@ end
 if ~isfield(eps, 'isdf') || isempty(eps.isdf) || ~isstruct(eps.isdf)
     eps.isdf = struct();
 end
-
-if ~isfield(eps.isdf, 'enable')
-    eps.isdf.enable = false;
-end
-
-if ~isfield(eps.isdf, 'algorithm') || isempty(eps.isdf.algorithm)
-    if eps.freq_dep == 0
-        eps.isdf.algorithm = 'reduced_basis';
-    else
-        eps.isdf.algorithm = 'matrix_elements';
-    end
-end
-if ~isfield(eps.isdf, 'rank_ratio')
-    eps.isdf.rank_ratio = 1;
-end
-
-if ~isfield(eps.isdf, 'sample_method')
-    eps.isdf.sample_method = 'qrcp';
-end
-
-if ~isfield(eps.isdf, 'seed')
-    eps.isdf.seed = 0;
-end
-if ~isfield(eps.isdf, 'sample_precision') || isempty(eps.isdf.sample_precision)
-    eps.isdf.sample_precision = 'double';
-end
-if ~isfield(eps.isdf, 'interpolation_solver') || isempty(eps.isdf.interpolation_solver)
-    eps.isdf.interpolation_solver = 'direct';
-end
-if ~isfield(eps.isdf, 'svd_cutoff') || isempty(eps.isdf.svd_cutoff)
-    eps.isdf.svd_cutoff = 0;
-end
-if ~isfield(eps.isdf, 'svd_ratio') || isempty(eps.isdf.svd_ratio)
-    eps.isdf.svd_ratio = 0.5;
-end
-if ~isfield(eps.isdf, 'validate_hf_exchange') || isempty(eps.isdf.validate_hf_exchange)
-    % VC validation compares direct and ISDF Coulomb product norms after
-    % interpolation.  It is opt-in because it repeats the product FFTs.
-    eps.isdf.validate_hf_exchange = false;
-end
-if ~isfield(eps.isdf, 'validate_hf_exchange_max_pairs') || ...
-        isempty(eps.isdf.validate_hf_exchange_max_pairs)
-    eps.isdf.validate_hf_exchange_max_pairs = Inf;
-end
-
-if ~isfield(eps.isdf, 'reduced_solver') || isempty(eps.isdf.reduced_solver)
-    eps.isdf.reduced_solver = 'cauchy';
-end
+eps.isdf = isdf.workflow_defaults(eps.isdf, eps.freq_dep);
 
 if ~isfield(eps.isdf, 'output') || isempty(eps.isdf.output)
     eps.isdf.output = 'screened_w';
 end
 if ~isfield(eps.isdf, 'cache_real_wfn') || isempty(eps.isdf.cache_real_wfn)
     eps.isdf.cache_real_wfn = false;
-end
-
-if ~isfield(eps.isdf, 'cauchy_froErr') || isempty(eps.isdf.cauchy_froErr)
-    eps.isdf.cauchy_froErr = 1e-8;
-end
-
-if ~isfield(eps.isdf, 'cauchy_MaxIter') || isempty(eps.isdf.cauchy_MaxIter)
-    eps.isdf.cauchy_MaxIter = 12;
 end
 
 end

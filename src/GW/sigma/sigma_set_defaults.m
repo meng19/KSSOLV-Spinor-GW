@@ -27,34 +27,7 @@ end
 if ~isfield(sig, 'isdf') || isempty(sig.isdf) || ~isstruct(sig.isdf)
     sig.isdf = struct();
 end
-
-if ~isfield(sig.isdf, 'enable')
-    sig.isdf.enable = false;
-end
-
-if ~isfield(sig.isdf, 'rank_ratio')
-    sig.isdf.rank_ratio = 1;
-end
-
-if ~isfield(sig.isdf, 'sample_method')
-    sig.isdf.sample_method = 'qrcp';
-end
-
-if ~isfield(sig.isdf, 'seed')
-    sig.isdf.seed = 0;
-end
-if ~isfield(sig.isdf, 'sample_precision') || isempty(sig.isdf.sample_precision)
-    sig.isdf.sample_precision = 'double';
-end
-if ~isfield(sig.isdf, 'interpolation_solver') || isempty(sig.isdf.interpolation_solver)
-    sig.isdf.interpolation_solver = 'direct';
-end
-if ~isfield(sig.isdf, 'svd_cutoff') || isempty(sig.isdf.svd_cutoff)
-    sig.isdf.svd_cutoff = 0;
-end
-if ~isfield(sig.isdf, 'svd_ratio') || isempty(sig.isdf.svd_ratio)
-    sig.isdf.svd_ratio = 0.5;
-end
+sig.isdf = isdf.workflow_defaults(sig.isdf, sig.freq_dep);
 
 % The legacy path uses the NN product space for every sigma contribution.
 % A VN space can be selected explicitly for the bare-exchange term only.
@@ -70,37 +43,10 @@ end
 if ~isfield(sig.isdf, 'reuse_nn_for_vn') || isempty(sig.isdf.reuse_nn_for_vn)
     sig.isdf.reuse_nn_for_vn = false;
 end
-if ~isfield(sig.isdf, 'validate_hf_exchange') || isempty(sig.isdf.validate_hf_exchange)
-    % Direct FFT validation is deliberately opt-in: it recomputes every
-    % selected occupied product after its ISDF interpolation is built.
-    sig.isdf.validate_hf_exchange = false;
-end
-if ~isfield(sig.isdf, 'validate_hf_exchange_max_pairs') || ...
-        isempty(sig.isdf.validate_hf_exchange_max_pairs)
-    sig.isdf.validate_hf_exchange_max_pairs = Inf;
-end
 if ~isfield(sig.isdf, 'reuse_eps_real_wfn') || isempty(sig.isdf.reuse_eps_real_wfn)
     sig.isdf.reuse_eps_real_wfn = false;
 end
 
-if ~isfield(sig.isdf, 'algorithm') || isempty(sig.isdf.algorithm)
-    if sig.freq_dep == 0
-        sig.isdf.algorithm = 'reduced_basis';
-    else
-        sig.isdf.algorithm = 'matrix_elements';
-    end
-end
-if ~isfield(sig.isdf, 'reduced_solver') || isempty(sig.isdf.reduced_solver)
-    sig.isdf.reduced_solver = 'cauchy';
-end
-
-if ~isfield(sig.isdf, 'cauchy_froErr') || isempty(sig.isdf.cauchy_froErr)
-    sig.isdf.cauchy_froErr = 1e-8;
-end
-
-if ~isfield(sig.isdf, 'cauchy_MaxIter') || isempty(sig.isdf.cauchy_MaxIter)
-    sig.isdf.cauchy_MaxIter = 12;
-end
 if ~isfield(sig.isdf, 'screened_kernel_cache_gb') || ...
         isempty(sig.isdf.screened_kernel_cache_gb)
     % Cache budget for reusing reduced screened kernels shared by several

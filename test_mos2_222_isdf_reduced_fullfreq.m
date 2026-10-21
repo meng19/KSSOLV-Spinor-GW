@@ -41,6 +41,7 @@ eps.isdf.rank_ratio_vc = 8;
 % eps.isdf.rank = 28;
 eps.isdf.reduced_solver = 'direct';
 eps.isdf.seed = 0;
+eps.isdf.validate_hf_exchange = true;
 eps = epsilon(sys, options, syms, eps);
 fprintf('Finished ISDF reduced-basis epsilon screened W.\n');
 toc
@@ -70,6 +71,7 @@ sig.isdf.global_nn_space = true;
 sig.isdf.reuse_nn_for_vn = true;
 % sig.isdf.rank = 28;
 sig.isdf.seed = 0;
+sig.isdf.validate_hf_exchange = true;
 sig = sigma(eps, sig, sys, options, syms);
 fprintf('Finished ISDF reduced-basis sigma full-frequency calculation.\n');
 toc

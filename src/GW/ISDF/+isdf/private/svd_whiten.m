@@ -4,12 +4,6 @@ function [zeta_g, coeff, transform, info] = svd_whiten( ...
 %   With C = U*Lambda*U', use R = U*Lambda^(-ratio) and
 %   L = Lambda^(ratio-1)*U', so R*L is the truncated C^{-1}.
 
-if ~isfield(options, 'svd_cutoff') || isempty(options.svd_cutoff)
-    options.svd_cutoff = 0;
-end
-if ~isfield(options, 'svd_ratio') || isempty(options.svd_ratio)
-    options.svd_ratio = 0.5;
-end
 c2_host = gather_if_gpu(c2);
 c2_host = (c2_host + c2_host') / 2;
 [vectors, values] = eig(c2_host, 'vector');
@@ -34,7 +28,7 @@ if isa(c1, 'gpuArray')
 end
 zeta_real = c1 * right_factor;
 if isempty(product_mu)
-    % In lazy product_mu mode coefficients are regenerated in band-pair
+    % In streamed product_mu mode coefficients are regenerated in band-pair
     % blocks by isdf.product_coefficients and transformed there.
     coeff = [];
 else

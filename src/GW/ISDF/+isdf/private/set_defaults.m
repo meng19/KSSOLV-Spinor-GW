@@ -1,5 +1,16 @@
-function options = set_defaults(options, nleft, nright, ngrid)
+function options = set_defaults(options, nleft, nright, ngrid, fftgrid)
 %SET_DEFAULTS Fill ISDF product-space option defaults.
+
+if nargin < 1 || isempty(options)
+    options = struct();
+end
+if nargin < 2
+    options = local_polarizability_defaults(options);
+    return;
+end
+if nargin < 5
+    fftgrid = [];
+end
 
 max_rank = min([ngrid, nleft * nright]);
 rank_was_set = isfield(options, 'rank') && ~isempty(options.rank);
@@ -66,14 +77,58 @@ if ~(isscalar(options.swap_left_right) && ...
     error('ISDF:SwapLeftRight', 'swap_left_right must be a logical scalar.');
 end
 options.swap_left_right = logical(options.swap_left_right);
+for product_type = {'vc', 'vn', 'nn'}
+    suffix = product_type{1};
+    for base_name = {'rank', 'rank_ratio', 'swap_left_right'}
+        field = [base_name{1} '_' suffix];
+        if ~isfield(options, field)
+            options.(field) = [];
+        end
+    end
+end
 if ~isfield(options, 'rcond_tol') || isempty(options.rcond_tol)
     options.rcond_tol = 1e-12;
 end
 if ~isfield(options, 'warn_ill_conditioned') || isempty(options.warn_ill_conditioned)
     options.warn_ill_conditioned = false;
 end
+if ~isfield(options, 'ill_conditioned_solver') || ...
+        isempty(options.ill_conditioned_solver)
+    options.ill_conditioned_solver = 'direct';
+end
+options.ill_conditioned_solver = lower(char(options.ill_conditioned_solver));
+if ~any(strcmp(options.ill_conditioned_solver, {'direct', 'pinv'}))
+    error('ISDF:IllConditionedSolver', ...
+        'ill_conditioned_solver must be ''direct'' or ''pinv''.');
+end
 if ~isfield(options, 'weight') || isempty(options.weight)
     options.weight = 'add';
+end
+if ~isfield(options, 'weight_was_set') || isempty(options.weight_was_set)
+    options.weight_was_set = false;
+end
+if ~isfield(options, 'points') || isempty(options.points)
+    options.points = [];
+end
+if ~isfield(options, 'progress') || isempty(options.progress)
+    options.progress = [];
+end
+if ~isfield(options, 'print_rank') || isempty(options.print_rank)
+    options.print_rank = true;
+end
+if ~isfield(options, 'product_type') || isempty(options.product_type)
+    options.product_type = '';
+end
+if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
+    options.fftgrid = fftgrid;
+end
+if ~isfield(options, 'validate_hf_exchange_max_pairs') || ...
+        isempty(options.validate_hf_exchange_max_pairs)
+    options.validate_hf_exchange_max_pairs = Inf;
+end
+if ~isfield(options, 'validate_hf_exchange_label') || ...
+        isempty(options.validate_hf_exchange_label)
+    options.validate_hf_exchange_label = 'HF exchange';
 end
 if ~isfield(options, 'power') || isempty(options.power)
     options.power = 1;
@@ -86,8 +141,9 @@ if ~isfield(options, 'kmeans_max_iter') || isempty(options.kmeans_max_iter)
 end
 if ~isfield(options, 'kmeans_distance_block_elements') || ...
         isempty(options.kmeans_distance_block_elements)
-    % Bound the temporary (point block)-by-(center) distance matrix.
-    options.kmeans_distance_block_elements = 2e7;
+    % Default to the full distance matrix for maximum BLAS throughput.
+    % Memory-limited calculations must set a finite block-element limit.
+    options.kmeans_distance_block_elements = Inf;
 end
 if ~(isscalar(options.kmeans_distance_block_elements) && ...
         options.kmeans_distance_block_elements >= 1)
@@ -108,7 +164,8 @@ if ~any(strcmp(options.sample_precision, {'double', 'single'}))
 end
 if ~isfield(options, 'projection_block_elements') || ...
         isempty(options.projection_block_elements)
-    options.projection_block_elements = 2e6;
+    % Do not split projected product calculations unless requested.
+    options.projection_block_elements = Inf;
 end
 if ~(isscalar(options.projection_block_elements) && ...
         options.projection_block_elements >= 1)
@@ -116,20 +173,19 @@ if ~(isscalar(options.projection_block_elements) && ...
         'projection_block_elements must be a positive scalar.');
 end
 if ~isfield(options, 'product_mu_storage') || isempty(options.product_mu_storage)
-    % A dense nmu-by-(nleft*nright) coefficient matrix is prohibitive for
-    % large NN spaces.  Keep the historical dense representation for small
-    % spaces and regenerate selected band-pair columns from the values at
-    % interpolation points for larger ones.
-    options.product_mu_storage = 'auto';
+    % The dense coefficient matrix is the fastest representation.
+    options.product_mu_storage = 'full';
 end
 options.product_mu_storage = lower(char(options.product_mu_storage));
-if ~any(strcmp(options.product_mu_storage, {'auto', 'full', 'lazy'}))
+if ~any(strcmp(options.product_mu_storage, {'auto', 'full', 'stream'}))
     error('ISDF:ProductMuStorage', ...
-        'product_mu_storage must be ''auto'', ''full'', or ''lazy''.');
+        'product_mu_storage must be ''auto'', ''full'', or ''stream''.');
 end
 if ~isfield(options, 'product_mu_max_elements') || ...
         isempty(options.product_mu_max_elements)
-    options.product_mu_max_elements = 2e7;
+    % Retain the dense, faster representation through roughly 1.5 GiB for
+    % complex double data.  Larger NN spaces switch to streamed coefficients.
+    options.product_mu_max_elements = 1e8;
 end
 if ~(isscalar(options.product_mu_max_elements) && ...
         options.product_mu_max_elements >= 1)
@@ -138,9 +194,8 @@ if ~(isscalar(options.product_mu_max_elements) && ...
 end
 if ~isfield(options, 'product_gram_storage') || ...
         isempty(options.product_gram_storage)
-    % Forming C1 has ngrid*rank entries.  Above this limit construct its
-    % Fourier samples in interpolation-point blocks instead.
-    options.product_gram_storage = 'auto';
+    % The full C1 path avoids block-loop and repeated-FFT overhead.
+    options.product_gram_storage = 'full';
 end
 options.product_gram_storage = lower(char(options.product_gram_storage));
 if ~any(strcmp(options.product_gram_storage, {'auto', 'full', 'stream'}))
@@ -149,7 +204,9 @@ if ~any(strcmp(options.product_gram_storage, {'auto', 'full', 'stream'}))
 end
 if ~isfield(options, 'product_gram_max_elements') || ...
         isempty(options.product_gram_max_elements)
-    options.product_gram_max_elements = 2e7;
+    % Keep the full C1 path by default whenever it is reasonably sized;
+    % streaming remains the automatic safeguard for large grids/ranks.
+    options.product_gram_max_elements = 1e8;
 end
 if ~(isscalar(options.product_gram_max_elements) && ...
         options.product_gram_max_elements >= 1)
@@ -158,7 +215,12 @@ if ~(isscalar(options.product_gram_max_elements) && ...
 end
 if ~isfield(options, 'product_gram_block_elements') || ...
         isempty(options.product_gram_block_elements)
-    options.product_gram_block_elements = options.projection_block_elements;
+    if strcmp(options.product_gram_storage, 'stream')
+        % A caller explicitly requesting streaming expects a bounded block.
+        options.product_gram_block_elements = 2e6;
+    else
+        options.product_gram_block_elements = Inf;
+    end
 end
 if ~(isscalar(options.product_gram_block_elements) && ...
         options.product_gram_block_elements >= 1)
@@ -204,6 +266,54 @@ options.adaptive_rank_max = min(max(1, ceil(options.adaptive_rank_max)), max_ran
 options.adaptive_rank_step = max(1, ceil(options.adaptive_rank_step));
 options.adaptive_validation_rank = max(1, ...
     ceil(options.adaptive_validation_rank));
+end
+
+function options = local_polarizability_defaults(options)
+% Keep reduced-polarizability defaults in the same central ISDF entry point.
+if ~isfield(options, 'method') || isempty(options.method)
+    options.method = 'cauchy';
+end
+if ~isfield(options, 'freq') || isempty(options.freq)
+    options.freq = 0;
+end
+if ~isfield(options, 'progress') || isempty(options.progress)
+    options.progress = [];
+end
+if ~isfield(options, 'froErr') || isempty(options.froErr)
+    options.froErr = 1e-8;
+end
+if ~isfield(options, 'MaxIter') || isempty(options.MaxIter)
+    options.MaxIter = 12;
+end
+if ~isfield(options, 'cauchy_coefficient_storage') || ...
+        isempty(options.cauchy_coefficient_storage)
+    options.cauchy_coefficient_storage = 'full';
+end
+options.cauchy_coefficient_storage = lower( ...
+    char(options.cauchy_coefficient_storage));
+if ~any(strcmp(options.cauchy_coefficient_storage, {'auto', 'full', 'stream'}))
+    error('ISDF:CauchyCoefficientStorage', ...
+        'cauchy_coefficient_storage must be ''auto'', ''full'', or ''stream''.');
+end
+if ~isfield(options, 'cauchy_coefficient_cache_bytes') || ...
+        isempty(options.cauchy_coefficient_cache_bytes)
+    options.cauchy_coefficient_cache_bytes = 4 * 1024^3;
+end
+if ~isfield(options, 'cauchy_coefficient_block_bytes') || ...
+        isempty(options.cauchy_coefficient_block_bytes)
+    if strcmp(options.cauchy_coefficient_storage, 'full')
+        options.cauchy_coefficient_block_bytes = Inf;
+    else
+        options.cauchy_coefficient_block_bytes = 512 * 1024^2;
+    end
+end
+if ~(isscalar(options.cauchy_coefficient_cache_bytes) && ...
+        options.cauchy_coefficient_cache_bytes >= 1 && ...
+        isscalar(options.cauchy_coefficient_block_bytes) && ...
+        options.cauchy_coefficient_block_bytes >= 1)
+    error('ISDF:CauchyCoefficientBytes', ...
+        'Cauchy coefficient byte limits must be positive scalars.');
+end
 end
 
 function warn_once(identifier, key, message, varargin)

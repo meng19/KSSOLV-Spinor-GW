@@ -20,9 +20,6 @@ if ncomponents ~= numel(right)
     error('ISDF:ComponentMismatch', ...
         'Left and right component counts must match.');
 end
-if ~isfield(options, 'freq') || isempty(options.freq)
-    options.freq = 0;
-end
 freq = options.freq(:).';
 nmu = size(left{1}, 1);
 nfreq = numel(freq);
@@ -100,10 +97,10 @@ function chunks = local_coefficient_chunks(left, right, options)
 % Describe pair-column chunks; cache their P/Q values only when small.
 nmu = size(left{1}, 1);
 npairs = size(left{1}, 2) * size(right{1}, 2);
-options = local_coefficient_options(options);
 % One pair column stores P and Q, i.e. 2 complex-double vectors of nmu.
 pair_block = max(1, floor(options.cauchy_coefficient_block_bytes / ...
     max(1, 32 * nmu)));
+pair_block = min(npairs, pair_block);
 cache_all = local_cache_coefficients(options, nmu, npairs);
 chunks = struct('P', {}, 'Q', {}, 'first', {}, 'last', {});
 for first = 1:pair_block:npairs
@@ -113,34 +110,6 @@ for first = 1:pair_block:npairs
         [chunk.P, chunk.Q] = local_chunk_coefficients(chunk, left, right);
     end
     chunks(end + 1) = chunk; %#ok<AGROW>
-end
-end
-
-function options = local_coefficient_options(options)
-if ~isfield(options, 'cauchy_coefficient_storage') || ...
-        isempty(options.cauchy_coefficient_storage)
-    options.cauchy_coefficient_storage = 'auto';
-end
-options.cauchy_coefficient_storage = lower( ...
-    char(options.cauchy_coefficient_storage));
-if ~any(strcmp(options.cauchy_coefficient_storage, {'auto', 'full', 'stream'}))
-    error('ISDF:CauchyCoefficientStorage', ...
-        'cauchy_coefficient_storage must be ''auto'', ''full'', or ''stream''.');
-end
-if ~isfield(options, 'cauchy_coefficient_cache_bytes') || ...
-        isempty(options.cauchy_coefficient_cache_bytes)
-    options.cauchy_coefficient_cache_bytes = 5.12e8;
-end
-if ~isfield(options, 'cauchy_coefficient_block_bytes') || ...
-        isempty(options.cauchy_coefficient_block_bytes)
-    options.cauchy_coefficient_block_bytes = 1.28e8;
-end
-if ~(isscalar(options.cauchy_coefficient_cache_bytes) && ...
-        options.cauchy_coefficient_cache_bytes >= 1 && ...
-        isscalar(options.cauchy_coefficient_block_bytes) && ...
-        options.cauchy_coefficient_block_bytes >= 1)
-    error('ISDF:CauchyCoefficientBytes', ...
-        'Cauchy coefficient byte limits must be positive scalars.');
 end
 end
 

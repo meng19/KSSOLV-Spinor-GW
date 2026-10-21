@@ -20,11 +20,8 @@ nleft = size(left{1}, 2);
 nright = size(right{1}, 2);
 options.weight_was_set = isfield(options, 'weight') && ...
     ~isempty(options.weight);
-options = set_defaults(options, nleft, nright, ngrid);
+options = set_defaults(options, nleft, nright, ngrid, fftgrid);
 local_print_rank(options, ngrid, nleft, nright);
-if ~isfield(options, 'fftgrid') || isempty(options.fftgrid)
-    options.fftgrid = fftgrid;
-end
 local_progress(options, 0.02, 'setup');
 if options.swap_left_right && options.adaptive_rank_enable
     error('ISDF:SwapAdaptiveRank', ...
@@ -107,7 +104,7 @@ end
 
 % Exact QRCP necessarily materializes products while selecting pivots, but
 % the final space can still release its selected coefficient matrix when
-% lazy storage was requested.  product_coefficients then reconstructs it.
+% streamed storage was requested.  product_coefficients then reconstructs it.
 if ~materialize_product_mu
     product_mu = [];
 end
@@ -154,7 +151,7 @@ function tf = local_materialize_product_mu(options, nleft, nright)
 switch options.product_mu_storage
     case 'full'
         tf = true;
-    case 'lazy'
+    case 'stream'
         tf = false;
     otherwise
         tf = options.rank * nleft * nright <= options.product_mu_max_elements;

@@ -14,12 +14,8 @@ if numel(left) ~= numel(right)
     error('ISDF:ComponentMismatch', ...
         'Left and right component counts must match.');
 end
-% Preserve the historical K-means defaults: the scalar path used the
-% configured default ('add'), whereas an implicit multi-component weight
-% used the product norm.  Explicit user choices always take precedence.
-if ~isfield(options, 'weight') || isempty(options)
-    options.weight = 'add';
-end
+% The configured default is supplied by ISDF set_defaults.  An implicit
+% multi-component weight uses the product norm; explicit choices win.
 if (~isfield(options, 'weight_was_set') || ~options.weight_was_set) && ...
         numel(left) > 1
     options.weight = 'prod';
@@ -36,9 +32,6 @@ switch lower(options.weight)
     case 'add'
         weight = local_density_weight(left, right, ngrid);
     case 'power'
-        if ~isfield(options, 'power') || isempty(options.power)
-            options.power = 1;
-        end
         weight = local_product_weight(left, right, ngrid) .^ ...
             (options.power / 2);
     otherwise
