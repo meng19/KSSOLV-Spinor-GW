@@ -1,4 +1,9 @@
 function sig = sigma(eps, sig, sys, options, syms)
+if nargin < 3, sys = []; end
+if nargin < 4, options = []; end
+if nargin < 5, syms = []; end
+[eps, sys, options, syms] = sigma_checkpoint_inputs( ...
+    eps, sig, sys, options, syms);
 sig = sigma_set_defaults(sig);
 isdf.report_rank('reset');
 isdf.screened_kernel_cache('reset');

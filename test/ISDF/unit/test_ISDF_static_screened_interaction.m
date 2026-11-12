@@ -18,6 +18,14 @@ polar.coeff = -(a * a' + eye(nmu));
 
 screened = isdf.screened_w(vc_space, epsilon_vcoul, polar);
 
+minimal_screened = isdf.screened_w( ...
+    vc_space, epsilon_vcoul, polar, 'minimal');
+assert(~isfield(minimal_screened, 'polar_coeff') && ...
+    ~isfield(minimal_screened, 'coulomb_reduced'), ...
+    'Minimal screened-W storage retained diagnostic pages.');
+assert(norm(minimal_screened.k_mu - screened.k_mu, 'fro') < 1e-10, ...
+    'Minimal screened-W storage changed the reduced interaction.');
+
 vmat = vc_space.zeta_g' * diag(epsilon_vcoul) * vc_space.zeta_g;
 expected_eps_mu = inv(polar.coeff) - vmat;
 expected_k_mu = inv(expected_eps_mu);

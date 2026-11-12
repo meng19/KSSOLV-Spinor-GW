@@ -117,7 +117,7 @@ assert(kmeans_error < 1e-10, ...
 assert(~isfield(kmeans_space, 'products'));
 
 blocked_kmeans_options = kmeans_options;
-blocked_kmeans_options.kmeans_distance_block_elements = 1;
+blocked_kmeans_options.kmeans_distance_block_elements = '1e0';
 blocked_kmeans_space = isdf.build_space(left, right, ...
     idx_q, fftgrid, blocked_kmeans_options);
 assert(isequal(blocked_kmeans_space.ind_mu, kmeans_space.ind_mu), ...
@@ -125,10 +125,13 @@ assert(isequal(blocked_kmeans_space.ind_mu, kmeans_space.ind_mu), ...
 
 stream_options = kmeans_options;
 stream_options.product_gram_storage = 'stream';
-stream_options.product_gram_block_elements = nfft;
+stream_options.product_gram_block_elements = '7.2e1';
+stream_options.compute_rcond = false;
 stream_space = isdf.build_space(left, right, ...
     idx_q, fftgrid, stream_options);
 assert(isequal(stream_space.ind_mu, kmeans_space.ind_mu));
+assert(isnan(stream_space.solve_info.rcond), ...
+    'Disabled rcond estimation should be marked as unavailable.');
 stream_error = max(abs(stream_space.zeta_g(:) - kmeans_space.zeta_g(:)));
 assert(stream_error < 1e-10, ...
     'Streamed product Gram differs from the dense path: %.3e', stream_error);

@@ -92,6 +92,14 @@ end
 if ~isfield(options, 'warn_ill_conditioned') || isempty(options.warn_ill_conditioned)
     options.warn_ill_conditioned = false;
 end
+if ~isfield(options, 'compute_rcond') || isempty(options.compute_rcond)
+    options.compute_rcond = true;
+end
+if ~(isscalar(options.compute_rcond) && ...
+        (islogical(options.compute_rcond) || isnumeric(options.compute_rcond)))
+    error('ISDF:ComputeRcond', 'compute_rcond must be a logical scalar.');
+end
+options.compute_rcond = logical(options.compute_rcond);
 if ~isfield(options, 'ill_conditioned_solver') || ...
         isempty(options.ill_conditioned_solver)
     options.ill_conditioned_solver = 'direct';
@@ -144,6 +152,10 @@ if ~isfield(options, 'kmeans_distance_block_elements') || ...
     % Default to the full distance matrix for maximum BLAS throughput.
     % Memory-limited calculations must set a finite block-element limit.
     options.kmeans_distance_block_elements = Inf;
+else
+    options.kmeans_distance_block_elements = local_parse_element_size( ...
+        options.kmeans_distance_block_elements, ...
+        'kmeans_distance_block_elements');
 end
 if ~(isscalar(options.kmeans_distance_block_elements) && ...
         options.kmeans_distance_block_elements >= 1)
@@ -166,6 +178,9 @@ if ~isfield(options, 'projection_block_elements') || ...
         isempty(options.projection_block_elements)
     % Do not split projected product calculations unless requested.
     options.projection_block_elements = Inf;
+else
+    options.projection_block_elements = local_parse_element_size( ...
+        options.projection_block_elements, 'projection_block_elements');
 end
 if ~(isscalar(options.projection_block_elements) && ...
         options.projection_block_elements >= 1)
@@ -186,6 +201,9 @@ if ~isfield(options, 'product_mu_max_elements') || ...
     % Retain the dense, faster representation through roughly 1.5 GiB for
     % complex double data.  Larger NN spaces switch to streamed coefficients.
     options.product_mu_max_elements = 1e8;
+else
+    options.product_mu_max_elements = local_parse_element_size( ...
+        options.product_mu_max_elements, 'product_mu_max_elements');
 end
 if ~(isscalar(options.product_mu_max_elements) && ...
         options.product_mu_max_elements >= 1)
@@ -207,6 +225,9 @@ if ~isfield(options, 'product_gram_max_elements') || ...
     % Keep the full C1 path by default whenever it is reasonably sized;
     % streaming remains the automatic safeguard for large grids/ranks.
     options.product_gram_max_elements = 1e8;
+else
+    options.product_gram_max_elements = local_parse_element_size( ...
+        options.product_gram_max_elements, 'product_gram_max_elements');
 end
 if ~(isscalar(options.product_gram_max_elements) && ...
         options.product_gram_max_elements >= 1)
@@ -221,6 +242,9 @@ if ~isfield(options, 'product_gram_block_elements') || ...
     else
         options.product_gram_block_elements = Inf;
     end
+else
+    options.product_gram_block_elements = local_parse_element_size( ...
+        options.product_gram_block_elements, 'product_gram_block_elements');
 end
 if ~(isscalar(options.product_gram_block_elements) && ...
         options.product_gram_block_elements >= 1)
@@ -287,7 +311,11 @@ if ~isfield(options, 'MaxIter') || isempty(options.MaxIter)
 end
 if ~isfield(options, 'cauchy_coefficient_storage') || ...
         isempty(options.cauchy_coefficient_storage)
-    options.cauchy_coefficient_storage = 'full';
+    if strcmp(options.method, 'direct')
+        options.cauchy_coefficient_storage = 'stream';
+    else
+        options.cauchy_coefficient_storage = 'full';
+    end
 end
 options.cauchy_coefficient_storage = lower( ...
     char(options.cauchy_coefficient_storage));
@@ -298,14 +326,23 @@ end
 if ~isfield(options, 'cauchy_coefficient_cache_bytes') || ...
         isempty(options.cauchy_coefficient_cache_bytes)
     options.cauchy_coefficient_cache_bytes = 4 * 1024^3;
+else
+    options.cauchy_coefficient_cache_bytes = local_parse_byte_size( ...
+        options.cauchy_coefficient_cache_bytes, ...
+        'cauchy_coefficient_cache_bytes');
 end
 if ~isfield(options, 'cauchy_coefficient_block_bytes') || ...
         isempty(options.cauchy_coefficient_block_bytes)
-    if strcmp(options.cauchy_coefficient_storage, 'full')
+    if strcmp(options.cauchy_coefficient_storage, 'full') && ...
+            ~strcmp(options.method, 'direct')
         options.cauchy_coefficient_block_bytes = Inf;
     else
         options.cauchy_coefficient_block_bytes = 512 * 1024^2;
     end
+else
+    options.cauchy_coefficient_block_bytes = local_parse_byte_size( ...
+        options.cauchy_coefficient_block_bytes, ...
+        'cauchy_coefficient_block_bytes');
 end
 if ~(isscalar(options.cauchy_coefficient_cache_bytes) && ...
         options.cauchy_coefficient_cache_bytes >= 1 && ...
@@ -314,6 +351,81 @@ if ~(isscalar(options.cauchy_coefficient_cache_bytes) && ...
     error('ISDF:CauchyCoefficientBytes', ...
         'Cauchy coefficient byte limits must be positive scalars.');
 end
+end
+
+function value = local_parse_element_size(value, option_name)
+% Parse element counts, including numeric strings in scientific notation.
+if ischar(value) || (isstring(value) && isscalar(value))
+    text = strtrim(char(value));
+    if strcmpi(text, 'inf')
+        value = Inf;
+    else
+        value = str2double(text);
+    end
+    if ~local_valid_size(value)
+        error('ISDF:SizeOption', ...
+            '%s must be a positive number, optionally in scientific notation.', ...
+            option_name);
+    end
+end
+end
+
+function value = local_parse_byte_size(value, option_name)
+% Parse byte sizes with decimal GB or binary GiB style units.
+if ~(ischar(value) || (isstring(value) && isscalar(value)))
+    return;
+end
+text = lower(strtrim(char(value)));
+if strcmp(text, 'inf')
+    value = Inf;
+    return;
+end
+numeric_value = str2double(text);
+if ~isnan(numeric_value)
+    value = numeric_value;
+else
+    number_pattern = ...
+        '([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?)';
+    tokens = regexp(text, ...
+        ['^' number_pattern '\s*([kmgt]?)(i?)b$'], 'tokens', 'once');
+    if isempty(tokens) || (isempty(tokens{2}) && ~isempty(tokens{3}))
+        error('ISDF:SizeOption', ...
+            ['%s must be a positive byte size, such as "2GB", ' ...
+            '"2GiB", or "2.0e9".'], option_name);
+    end
+    value = str2double(tokens{1});
+    unit = tokens{2};
+    if isempty(unit)
+        multiplier = 1;
+    else
+        if isempty(tokens{3})
+            base = 1000;
+        else
+            base = 1024;
+        end
+        switch unit
+            case 'k'
+                exponent = 1;
+            case 'm'
+                exponent = 2;
+            case 'g'
+                exponent = 3;
+            case 't'
+                exponent = 4;
+        end
+        multiplier = base^exponent;
+    end
+    value = value * multiplier;
+end
+if ~local_valid_size(value)
+    error('ISDF:SizeOption', ...
+        '%s must be a positive byte size.', option_name);
+end
+end
+
+function tf = local_valid_size(value)
+tf = isnumeric(value) && isreal(value) && isscalar(value) && ...
+    ~isnan(value) && value >= 1;
 end
 
 function warn_once(identifier, key, message, varargin)

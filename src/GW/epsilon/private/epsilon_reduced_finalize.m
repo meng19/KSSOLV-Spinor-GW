@@ -40,16 +40,27 @@ if acc.need_screened_w && ~isfield(eps, 'isdf_screened_w')
 end
 if acc.need_screened_w && ~isempty(acc.zeta_blocks)
     gw_timer('start', 'Epsilon screened W');
-    combined_space.zeta_g = cat(2, acc.zeta_blocks{:});
-    combined_polar.coeff = ctx.fact * epsilon_page_blkdiag( ...
-        acc.coeff_blocks);
+    if numel(acc.zeta_blocks) == 1
+        combined_space.zeta_g = acc.zeta_blocks{1};
+    else
+        combined_space.zeta_g = cat(2, acc.zeta_blocks{:});
+    end
+    combined_polar.coeff = epsilon_page_blkdiag(acc.coeff_blocks);
+    % The combined arrays now own the only references needed by screened W.
+    % Release the original blocks before the reduced matrix factorizations.
+    acc.zeta_blocks = {};
+    acc.coeff_blocks = {};
     if isa(combined_space.zeta_g, 'gpuArray') && ~isa(coulg, 'gpuArray')
         coulg = gpuArray(coulg);
     end
-    eps.isdf_screened_w{iq} = isdf.screened_w( ...
-        combined_space, coulg(:), combined_polar);
-    eps.isdf_screened_w{iq} = epsilon_gather_screened_w( ...
-        eps.isdf_screened_w{iq});
+    screened = isdf.screened_w( ...
+        combined_space, coulg(:), combined_polar, ...
+        ctx.eps.isdf.screened_w_storage);
+    % In minimal storage mode these inputs are no longer needed.  Release
+    % them before gathering k_mu and zeta_g to the host.
+    clear combined_space combined_polar;
+    screened = epsilon_gather_screened_w(screened);
+    eps.isdf_screened_w{iq} = screened;
     gw_timer('stop', 'Epsilon screened W');
 end
 end

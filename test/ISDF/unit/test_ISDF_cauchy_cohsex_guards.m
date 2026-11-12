@@ -35,6 +35,8 @@ assert(isfield(eps.isdf, 'reduced_solver'));
 assert(strcmp(eps.isdf.reduced_solver, 'cauchy'));
 assert(isfield(eps.isdf, 'output'));
 assert(strcmp(eps.isdf.output, 'screened_w'));
+assert(isfield(eps.isdf, 'screened_w_storage'));
+assert(strcmp(eps.isdf.screened_w_storage, 'minimal'));
 assert(isfield(eps.isdf, 'cauchy_froErr'));
 assert(isfield(eps.isdf, 'cauchy_MaxIter'));
 assert(~isfield(eps.isdf, 'store_full_inverse'));

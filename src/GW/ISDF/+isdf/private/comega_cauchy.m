@@ -7,13 +7,13 @@ function [result, relative_error, iteration, fallback_direct] = comega_cauchy( .
 % weight gamma(v,c) = sum_z c_z*wv(v;z)*wc(c;z).  Each iteration then costs
 % one pair of GEMMs on prebuilt coefficient matrices instead of two GEMMs
 % per node:
-%   result = sum_b (P_b .* gamma_b) * Q_b'
+%   result = sum_b (P_b .* gamma_b) * P_b'
 %   P_b(p; v,c) = sum_s conj(L_s(p,v)).*R_s(p,c)
-%   Q_b(q; v,c) = sum_t L_t(q,v).*R_t(q,c)
-% P and Q depend only on the block coefficients, not on frequency or node,
-% so they are built once per call and reused by the static, plus-, and
-% minus-frequency pages.  Column chunks over the conduction index bound the
-% working-set memory on large product spaces.
+% The historical Q factor is exactly conj(P), so only P is constructed.
+% P depends only on the block coefficients, not on frequency or node, so it
+% is built once per call and reused by the static, plus-, and minus-frequency
+% pages.  Column chunks over the conduction index bound the working-set
+% memory on large product spaces.
 
 ncomponents = numel(left);
 if ncomponents ~= numel(right)
@@ -94,20 +94,22 @@ iteration = max(iterations);
 end
 
 function chunks = local_coefficient_chunks(left, right, options)
-% Describe pair-column chunks; cache their P/Q values only when small.
+% Describe pair-column chunks; cache their P values only when small.
 nmu = size(left{1}, 1);
 npairs = size(left{1}, 2) * size(right{1}, 2);
-% One pair column stores P and Q, i.e. 2 complex-double vectors of nmu.
+% Retain the historical P/Q-based block sizing.  P and its scaled work array
+% now fit within the same temporary budget instead of requiring P, Q, and
+% another P-sized array.
 pair_block = max(1, floor(options.cauchy_coefficient_block_bytes / ...
     max(1, 32 * nmu)));
 pair_block = min(npairs, pair_block);
 cache_all = local_cache_coefficients(options, nmu, npairs);
-chunks = struct('P', {}, 'Q', {}, 'first', {}, 'last', {});
+chunks = struct('P', {}, 'first', {}, 'last', {});
 for first = 1:pair_block:npairs
     last = min(npairs, first + pair_block - 1);
-    chunk = struct('P', [], 'Q', [], 'first', first, 'last', last);
+    chunk = struct('P', [], 'first', first, 'last', last);
     if cache_all
-        [chunk.P, chunk.Q] = local_chunk_coefficients(chunk, left, right);
+        chunk.P = local_chunk_coefficients(chunk, left, right);
     end
     chunks(end + 1) = chunk; %#ok<AGROW>
 end
@@ -120,7 +122,7 @@ switch options.cauchy_coefficient_storage
     case 'stream'
         tf = false;
     otherwise
-        tf = 32 * nmu * npairs <= options.cauchy_coefficient_cache_bytes;
+        tf = 16 * nmu * npairs <= options.cauchy_coefficient_cache_bytes;
 end
 end
 
@@ -181,7 +183,7 @@ end
 end
 
 function value = local_direct_resolvent(chunks, left, right, ev_occ, ev_unocc)
-% Exact reduced pair summation, evaluated through the cached P/Q chunks.
+% Exact reduced pair summation, evaluated through the cached P chunks.
 % This is algebraically identical to comega_direct for one resolvent page,
 % but avoids reconstructing one real-space product at a time.
 ev_occ_work = ev_occ;
@@ -195,22 +197,21 @@ value = local_folded_apply(chunks, gamma, left, right);
 end
 
 function value = local_folded_apply(chunks, gamma, left, right)
-% Accumulate P*diag(gamma(:))*Q'; rebuild streamed chunks one at a time.
+% Accumulate P*diag(gamma(:))*P'; rebuild streamed chunks one at a time.
 gamma_row = reshape(gamma, 1, []);
 value = complex(zeros(size(left{1}, 1), size(left{1}, 1), ...
     'like', left{1}));
 for ichunk = 1:numel(chunks)
-    [P, Q] = local_chunk_coefficients(chunks(ichunk), left, right);
+    P = local_chunk_coefficients(chunks(ichunk), left, right);
     scaled = P .* gamma_row( ...
         chunks(ichunk).first:chunks(ichunk).last);
-    value = value + scaled * Q.';
+    value = value + scaled * P';
 end
 end
 
-function [P, Q] = local_chunk_coefficients(chunk, left, right)
+function P = local_chunk_coefficients(chunk, left, right)
 if ~isempty(chunk.P)
     P = chunk.P;
-    Q = chunk.Q;
     return;
 end
 nmu = size(left{1}, 1);
@@ -219,10 +220,8 @@ columns = chunk.first:chunk.last;
 iv = mod(columns - 1, nv) + 1;
 ic = floor((columns - 1) / nv) + 1;
 P = complex(zeros(nmu, numel(columns), 'like', left{1}));
-Q = complex(zeros(nmu, numel(columns), 'like', right{1}));
 for icomponent = 1:numel(left)
     P = P + conj(left{icomponent}(:, iv)) .* right{icomponent}(:, ic);
-    Q = Q + left{icomponent}(:, iv) .* conj(right{icomponent}(:, ic));
 end
 end
 

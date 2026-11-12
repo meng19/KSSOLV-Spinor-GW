@@ -721,7 +721,7 @@ eps.isdf.output = 'full_inverse'; % 只返回完整 eps.inv，用于对照
 eps.isdf.output = 'both';         % 同时返回二者，用于验证
 ```
 
-`eps.isdf_screened_w` 是 reduced-basis epsilon 自动生成的低秩屏蔽相互作用，不是用户输入参数。它保存的是 ISDF 辅助基空间中的 screened \(W\) 对象，用于后续 reduced-basis sigma 收缩。默认 `screened_w` 模式不保存完整的 `eps.inv`，因为完整 \(G\)-space 逆矩阵会抵消低秩路径的内存优势。
+`eps.isdf_screened_w` 是 reduced-basis epsilon 自动生成的低秩屏蔽相互作用，不是用户输入参数。它保存的是 ISDF 辅助基空间中的 screened \(W\) 对象，用于后续 reduced-basis sigma 收缩。默认 `screened_w` 模式不保存完整的 `eps.inv`，因为完整 \(G\)-space 逆矩阵会抵消低秩路径的内存优势。epsilon 工作流的 `screened_w_storage='minimal'` 还会仅保留 sigma 所需的 `zeta_g`、`epsilon_vcoul` 和 `k_mu`；不保存未被 sigma 使用、尺寸为 \(r^2N_\omega\) 的 `polar_coeff` 诊断页和 `coulomb_reduced`。若需要检查这些中间量，可显式设为 `full`。
 
 自能计算会根据传入的 epsilon 结果自动选择路径：
 

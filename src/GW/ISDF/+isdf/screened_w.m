@@ -1,5 +1,18 @@
-function screened = screened_w(space, epsilon_vcoul, polar)
+function screened = screened_w(space, epsilon_vcoul, polar, storage)
 %ISDF.SCREENED_W Construct a reduced screened operator.
+%   STORAGE='minimal' retains only fields required by ISDF sigma.  The
+%   default 'full' also retains polar_coeff and coulomb_reduced for
+%   diagnostics and compatibility with direct package callers.
+
+if nargin < 4 || isempty(storage)
+    storage = 'full';
+end
+storage = lower(char(storage));
+if ~any(strcmp(storage, {'minimal', 'full'}))
+    error('ISDF:ScreenedWStorage', ...
+        'screened-W storage must be ''minimal'' or ''full'' (got ''%s'').', ...
+        storage);
+end
 
 epsilon_vcoul = epsilon_vcoul(:);
 if isa(space.zeta_g, 'gpuArray')
@@ -37,9 +50,11 @@ k_mu = page_solve_screened_w(polar.coeff, vmat);
 screened = struct();
 screened.zeta_g = space.zeta_g;
 screened.epsilon_vcoul = epsilon_vcoul;
-screened.polar_coeff = polar.coeff;
-screened.coulomb_reduced = vmat;
 screened.k_mu = k_mu;
+if strcmp(storage, 'full')
+    screened.polar_coeff = polar.coeff;
+    screened.coulomb_reduced = vmat;
+end
 end
 
 % ---- Warning-state cleanup ----

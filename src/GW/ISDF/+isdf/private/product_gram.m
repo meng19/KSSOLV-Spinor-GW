@@ -88,10 +88,15 @@ end
 end
 
 function values_g = local_fft_samples(values_real, idx_q, fftgrid)
-values_g = complex(zeros(numel(idx_q), size(values_real, 2), ...
-    'like', values_real));
-for icolumn = 1:size(values_real, 2)
-    values_fft = ifftn(reshape(values_real(:, icolumn), fftgrid));
-    values_g(:, icolumn) = values_fft(idx_q);
+% Preserve the historical ifftn convention, but transform every column in
+% the current mu block together.  FFTN would also transform the trailing
+% column dimension, so apply IFFT along the physical grid dimensions only.
+ncolumns = size(values_real, 2);
+grid_dimensions = fftgrid(:).';
+values_fft = reshape(values_real, [grid_dimensions, ncolumns]);
+for idimension = 1:numel(grid_dimensions)
+    values_fft = ifft(values_fft, [], idimension);
 end
+values_fft = reshape(values_fft, prod(grid_dimensions), ncolumns);
+values_g = values_fft(idx_q(:), :);
 end

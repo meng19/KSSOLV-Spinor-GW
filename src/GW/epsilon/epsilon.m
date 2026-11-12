@@ -4,6 +4,19 @@ isdf.report_rank('reset');
 gw_section_banner('epsilon', 'start');
 gw_timer('reset');
 gw_timer('start', 'Epsilon total');
+eps_request = eps;
+if ~isempty(eps.checkpoint_file)
+    [cache_hit, cached_eps] = epsilon_checkpoint_restore( ...
+        eps.checkpoint_file, eps_request, sys, options, syms);
+    if cache_hit
+        eps = cached_eps;
+        gw_timer('stop', 'Epsilon total');
+        fprintf('\nReused cached epsilon result; calculation skipped.\n');
+        gw_timer('report', 'Epsilon timing information');
+        gw_section_banner('epsilon', 'end');
+        return;
+    end
+end
 ctx = epsilon_context(sys, options, syms, eps);
 nbands = ctx.nbands;
 nspin = ctx.nspin;
@@ -112,6 +125,11 @@ eps.mtx = ctx.pol.mtx;
 eps.nmtx = ctx.pol.nmtx;
 eps.nfreq = ctx.pol.nfreq;
 eps.freq = ctx.pol.freq;
+
+if ~isempty(eps.checkpoint_file)
+    epsilon_checkpoint_save(eps.checkpoint_file, eps, eps_request, ...
+        sys, options, syms);
+end
 
 % 最终清理
 if use_gpu

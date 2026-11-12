@@ -8,6 +8,20 @@ if ~isfield(sig, 'precompute_wav')
     sig.precompute_wav = false;
 end
 
+% Optional epsilon checkpoint used when sigma is run in a later session.
+if ~isfield(sig, 'epsilon_checkpoint_file') || isempty(sig.epsilon_checkpoint_file)
+    sig.epsilon_checkpoint_file = '';
+end
+if isfield(sig, 'epsilon_checkpoint') && ~isempty(sig.epsilon_checkpoint)
+    sig.epsilon_checkpoint_file = sig.epsilon_checkpoint;
+end
+if ~(ischar(sig.epsilon_checkpoint_file) || ...
+        (isstring(sig.epsilon_checkpoint_file) && ...
+        isscalar(sig.epsilon_checkpoint_file)))
+    error('GW:EpsilonCheckpointFile', ...
+        'sig.epsilon_checkpoint_file must be a character vector or string scalar.');
+end
+
 if ~isfield(sig, 'freq_dep')
     sig.freq_dep = 0;                  % 默认静态COHSEX
 end
