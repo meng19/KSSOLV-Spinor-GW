@@ -84,9 +84,16 @@ eps_reduced = epsilon(sys, options, syms, eps_reduced_input);
 sig_reduced_input = sig_input;
 sig_reduced_input.isdf.enable = true;
 sig_reduced_input.isdf.algorithm = 'reduced_basis';
-sig_reduced_input.isdf.sample_method = 'qrcp';
+sig_reduced_input.isdf.sample_method = 'kmeans';
 sig_reduced_input.isdf.rank = sig_input.nbnd;
 sig_reduced_input.isdf.seed = 0;
+sig_reduced_input.isdf.global_nn_space = true;
+sig_reduced_input.isdf.right_band_block_size = 2;
+sig_reduced_input.isdf.product_mu_storage = 'stream';
+sig_reduced_input.isdf.product_gram_storage = 'stream';
+sig_reduced_input.isdf.exchange_space = 'vn';
+sig_reduced_input.isdf.reuse_nn_for_vn = true;
+sig_reduced_input.isdf.component_cache_gb = 1;
 
 sig_reduced = sigma(eps_reduced, sig_reduced_input, sys, options, syms);
 toc

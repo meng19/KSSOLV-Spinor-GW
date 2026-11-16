@@ -39,6 +39,11 @@ end
 ops = sigma_ops(ctx);
 if strcmp(ctx.method, 'reduced_basis') || strcmp(ctx.method, 'matrix_elements')
     sigma_isdf_component_cache('reset');
+    component_cache_bytes = ctx.sig.isdf.component_cache_gb * (1024^3);
+    if isinf(component_cache_bytes)
+        component_cache_bytes = Inf;
+    end
+    sigma_isdf_component_cache('limit', component_cache_bytes);
 end
 
 ndiag = ndiag_max - ndiag_min + 1;

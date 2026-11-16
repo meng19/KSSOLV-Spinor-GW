@@ -240,6 +240,8 @@ Sigma has further product-space reuse controls:
 | `exchange_space` | `"nn"` | Product space for bare exchange: `"nn"` reuses the NN space; `"vn"` builds/uses a smaller occupied-band VN space.  `"vn"` can be faster for few occupied bands, but needs its own rank convergence. |
 | `reuse_nn_for_vn` | `false` | If `true`, force exchange to reuse NN even when `exchange_space="vn"`; no VN space is built.  This prioritizes reuse over the smaller VN representation. |
 | `global_nn_space` | `false` | If `true`, build one NN space for every requested diagonal band at a given k/q/spin, then reuse it.  It usually reduces repeated setup when several `ndiag` bands are requested, but may use more memory. |
+| `right_band_block_size` | `Inf` | Finite value streams right-band real-space components while building a global NN space, avoiding one `ngrid × nbnd` allocation per spinor.  Requires kmeans sampling, direct interpolation, and streamed product-mu/product-Gram storage.  Only sampled right components are retained. |
+| `component_cache_gb` | `8` | LRU byte budget (in GiB) for cached sigma ISDF spaces/components.  Use a finite value for large global NN spaces; `0` disables caching and `Inf` removes the cap. |
 | `global_vn_space` | `false` | Analogous reuse for the VN exchange space.  It only matters when a separate VN space is actually used. |
 | `reuse_eps_real_wfn` | `false` | Reuse epsilon's cached real-space wavefunctions in sigma.  Set it together with `epsilon.isdf.cache_real_wfn=true`; it saves FFT construction at the cost of retaining the cache. |
 | `cache_real_wfn` | `false` (epsilon) | Retain epsilon real-space wavefunction components so sigma can reuse them.  Helpful when epsilon and sigma use compatible FFT grids; consumes memory. |

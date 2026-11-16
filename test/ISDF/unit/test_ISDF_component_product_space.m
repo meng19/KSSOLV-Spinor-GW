@@ -150,6 +150,26 @@ assert(stream_coeff_error < 1e-10, ...
 assert(max(abs(isdf.product_coefficients(stream_coeff_space, [2, 5]) - ...
     stream_coeff(:, [2, 5])), [], 'all') < 1e-12);
 
+provider_options = kmeans_options;
+provider_options.product_mu_storage = 'stream';
+provider_options.product_gram_storage = 'stream';
+provider_options.product_gram_block_elements = '7.2e1';
+provider_options.right_band_block_size = 2;
+provider_options.right_bands = 1:size(right{1}, 2);
+provider_options.right_component_fun = @(bands) cellfun( ...
+    @(r) r(:, bands), right, 'UniformOutput', false);
+provider_space = isdf.build_space(left, [], idx_q, fftgrid, provider_options);
+assert(isequal(provider_space.ind_mu, kmeans_space.ind_mu), ...
+    'Streamed right-band sampling selected different interpolation points.');
+provider_error = max(abs(provider_space.zeta_g(:) - kmeans_space.zeta_g(:)));
+assert(provider_error < 1e-10, ...
+    'Streamed right-band global space differs from dense path: %.3e', ...
+    provider_error);
+provider_coeff = isdf.product_coefficients(provider_space);
+expected_provider_coeff = products(provider_space.ind_mu, :);
+assert(max(abs(provider_coeff(:) - expected_provider_coeff(:))) < 1e-12, ...
+    'Streamed right-band coefficients differ from explicit products.');
+
 explicit_add_options = kmeans_options;
 explicit_add_options.weight = 'add';
 explicit_add_space = isdf.build_space(left, right, ...

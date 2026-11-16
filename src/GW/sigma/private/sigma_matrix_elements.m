@@ -110,19 +110,39 @@ space_status = 'reused';
 if ~hit
     left = local_left_components(ctx, block, left_bands, ...
         local_real_progress(block, progress_work, 0.02, 0.12, 'NN left'));
-    right = local_right_components(ctx, block, ...
-        local_real_progress(block, progress_work, 0.12, 0.22, 'NN right'));
     isdf_options = local_space_options( ...
         ctx, block, 'nn', progress_work, 0.22, 0.45, 'NN');
     if ~strcmp(ctx.method, 'reduced_basis')
         error('ISDF:GlobalNNSpaceRequiresReducedBasis', ...
             'global_nn_space requires the reduced_basis ISDF algorithm.');
     end
+    stream_right = isnumeric(ctx.sig.isdf.right_band_block_size) && ...
+        isfinite(ctx.sig.isdf.right_band_block_size);
+    if stream_right
+        isdf_options.right_component_fun = @(bands) local_components( ...
+            ctx, block.wfnkq, block.fft.Nfft2, block.idx.kq, ...
+            block.ispin, bands);
+        isdf_options.right_bands = 1:ctx.nbands;
+        isdf_options.right_band_block_size = ...
+            ctx.sig.isdf.right_band_block_size;
+        right = [];
+    else
+        right = local_right_components(ctx, block, ...
+            local_real_progress(block, progress_work, 0.12, 0.22, 'NN right'));
+    end
     gw_timer('start', 'Sigma ISDF interpolation');
     space = isdf.build_space(left, right, block.idx.q, ...
         ctx.grid_size, isdf_options);
     gw_timer('stop', 'Sigma ISDF interpolation');
-    local_validate_hf_exchange(ctx, block, space, left, right, 'NN');
+    if stream_right
+        if ctx.sig.isdf.validate_hf_exchange
+            error('ISDF:StreamedNNValidation', ...
+                ['HF exchange validation is not available with streamed ' ...
+                'right-band NN components.']);
+        end
+    else
+        local_validate_hf_exchange(ctx, block, space, left, right, 'NN');
+    end
     nq = numel(block.idx.q);
     % Keep the interpolation space and coefficients; no reduced-basis
     % sigma path materializes the full rho_in(G) table.
