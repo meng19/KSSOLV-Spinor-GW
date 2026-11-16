@@ -84,3 +84,4 @@ html/
 *.m.html
 slcov_output/
 *.cst
+debug.log
