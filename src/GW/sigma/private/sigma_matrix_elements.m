@@ -134,14 +134,13 @@ if ~hit
     space = isdf.build_space(left, right, block.idx.q, ...
         ctx.grid_size, isdf_options);
     gw_timer('stop', 'Sigma ISDF interpolation');
-    if stream_right
-        if ctx.sig.isdf.validate_hf_exchange
-            error('ISDF:StreamedNNValidation', ...
-                ['HF exchange validation is not available with streamed ' ...
-                'right-band NN components.']);
+    if ctx.sig.isdf.validate_hf_exchange
+        if stream_right
+            local_validate_hf_exchange( ...
+                ctx, block, space, left, [], 'NN', isdf_options);
+        else
+            local_validate_hf_exchange(ctx, block, space, left, right, 'NN');
         end
-    else
-        local_validate_hf_exchange(ctx, block, space, left, right, 'NN');
     end
     nq = numel(block.idx.q);
     % Keep the interpolation space and coefficients; no reduced-basis
@@ -373,22 +372,39 @@ gme_diag = reshape(space.zeta_g * isdf.product_coefficients(space, columns), ...
     nq, nleft);
 end
 
-function local_validate_hf_exchange(ctx, block, space, left, right, label)
+function local_validate_hf_exchange( ...
+        ctx, block, space, left, right, label, isdf_options)
 % Validate exactly the bare-exchange products used by this sigma block.
+% RIGHT is either the materialized component set or [] when components
+% arrive in bounded streaming blocks described by ISDF_OPTIONS.
 if ~ctx.sig.isdf.validate_hf_exchange
     return;
 end
 if strcmp(label, 'NN') && local_uses_vn_exchange(ctx)
     return;
 end
-weights = repmat(reshape(block.occ_kq(1:size(right{1}, 2)), 1, []), ...
+if nargin < 7
+    isdf_options = [];
+end
+if isempty(right)
+    % Streamed right bands: regenerate bounded blocks during validation.
+    provider = struct( ...
+        'fun', isdf_options.right_component_fun, ...
+        'bands', isdf_options.right_bands, ...
+        'block_size', ctx.sig.isdf.right_band_block_size);
+    nright = numel(isdf_options.right_bands);
+else
+    provider = right;
+    nright = size(right{1}, 2);
+end
+weights = repmat(reshape(block.occ_kq(1:nright), 1, []), ...
     size(left{1}, 2), 1);
 weights = weights(:);
 if ~any(weights)
     return;
 end
 gw_timer('start', 'Sigma ISDF HF validation');
-report = isdf.validate_hf_exchange(space, left, right, block.idx.q, ...
+report = isdf.validate_hf_exchange(space, left, provider, block.idx.q, ...
     ctx.grid_size, block.coulg, weights, ctx.sig.isdf);
 gw_timer('stop', 'Sigma ISDF HF validation');
 fprintf('ISDF %s exchange validation for k%d q%d target b%d\n', ...

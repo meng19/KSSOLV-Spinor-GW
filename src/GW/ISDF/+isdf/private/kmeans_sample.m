@@ -35,8 +35,13 @@ new_ind = last_ind;
 for iteration = 1:options.kmeans_max_iter %#ok<NASGU>
     [cluster_id, ~] = nearest_centers(points, points(last_ind, :), ...
         options.kmeans_distance_block_elements);
+    % Group points by cluster once instead of running one O(npoints)
+    % find() per center; large grids spend most of the time there.
+    [sorted_id, order] = sort(cluster_id);
+    counts = accumarray(sorted_id, 1, [rank_mu, 1]);
+    first_pos = cumsum([1; counts(1:end - 1)]);
     for imu = 1:rank_mu
-        cluster = find(cluster_id == imu);
+        cluster = order(first_pos(imu):first_pos(imu) + counts(imu) - 1);
         if isempty(cluster)
             new_ind(imu) = last_ind(imu);
             continue;

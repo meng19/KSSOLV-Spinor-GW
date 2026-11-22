@@ -20,9 +20,6 @@ gw_timer('start', 'Sigma screened kernel');
 kernel = local_project_screened_kernel(ctx, block, matrix_elements.space, ...
     local_space_key(matrix_elements));
 gw_timer('stop', 'Sigma screened kernel');
-asx_loc = 0;
-ax_loc = 0;
-ach_loc = 0;
 if ctx.sig.freq_dep == 2
     if ctx.use_gpu
         achx_loc_nn = gpuArray.zeros(block.in, ctx.nbands);
@@ -55,21 +52,15 @@ if ctx.sig.freq_dep ~= 2
         'Reduced sigma supports freq_dep = 0 or 2 (got %g).', ...
         ctx.sig.freq_dep);
 end
-for nn = 1:ctx.nbands
-    if isfield(matrix_elements, 'coeff')
-        coeff = matrix_elements.coeff(:, nn);
-    else
-        coeff = isdf.product_coefficients(matrix_elements.space, nn);
-    end
-    [asx_loc, ach_loc, achx_loc_nn(block.in, nn), ...
-        omega, iw_lda] = sigma_fullfreq(asx_loc, ach_loc, ...
-        block.in, nn, block.wfnk.ikq, block.wfnkq.ikq, ...
-        block.occ_kq(nn), ctx.options.ev, block.ispin, ...
-        coeff, coeff, ctx.fact * kernel, ctx.sig);
-    gw_block_progress(block, progress_work * (0.5 + 0.5 * nn / ctx.nbands), ...
-        sprintf('S b%d i%d q%d n%d/%d', ...
-        block.in, block.ik, block.iq, nn, ctx.nbands));
-end
+% Full-frequency contractions for all summation bands at once.  Each
+% band's rank-by-rank outer product is folded into block GEMMs against
+% the frequency-page kernel instead of one band at a time.
+gw_timer('start', 'Sigma fullfreq contraction');
+[asx_loc, ach_loc, achx_nn_row, omega, iw_lda] = sigma_batch_fullfreq( ...
+    ctx, block, local_coefficients(matrix_elements, ctx.nbands), ...
+    ctx.fact * kernel, progress_work);
+gw_timer('stop', 'Sigma fullfreq contraction');
+achx_loc_nn(block.in, :) = achx_nn_row;
 end
 
 achx_loc = 0;

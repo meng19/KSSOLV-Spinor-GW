@@ -56,11 +56,17 @@ eps = epsilon(sys, options, syms, eps);
 sig = config.sigma;
 sig = sigma(eps, sig, sys, options, syms);
 
+% The output phases are timed separately from epsilon/sigma, so the timers
+% accumulated by those stages are cleared before the writes below.
+gw_timer('reset');
+
 qp_file = fullfile(config_dir, 'qp.dat');
 if isfield(config, 'qp_file') && ~isempty(config.qp_file)
     qp_file = local_absolute_path(char(config.qp_file), config_dir);
 end
+gw_timer('start', 'Quasiparticle table write');
 local_write_qp_dat(sig, qp_file);
+gw_timer('stop', 'Quasiparticle table write');
 fprintf('Quasiparticle levels:   %s\n', qp_file);
 
 if isfield(config, 'save_file') && ~isempty(config.save_file)
@@ -69,9 +75,12 @@ if isfield(config, 'save_file') && ~isempty(config.save_file)
     if ~isempty(save_dir) && ~isfolder(save_dir)
         mkdir(save_dir);
     end
+    gw_timer('start', 'GW results save');
     save(save_file, 'eps', 'sig', 'sys', 'options', 'syms', 'config', '-v7.3');
+    gw_timer('stop', 'GW results save');
     fprintf('Saved GW results:       %s\n', save_file);
 end
+gw_timer('report', 'GW output writing');
 end
 
 function eps = local_complete_epsilon_bands(eps, options)

@@ -74,8 +74,11 @@ if ~isempty(idx_need)
         end
         ifreq_need(ifreq_need == 0) = nfreq_real - 1;
         
-        f_low  = sig.freq_integral(ifreq_need)';
-        f_high = sig.freq_integral(ifreq_need + 1)';
+        % Keep interpolation weights as columns: the frequency table is a
+        % row vector, so column indexing must be transposed back to avoid
+        % an implicit row/column broadcast.
+        f_low  = sig.freq_integral(ifreq_need).';
+        f_high = sig.freq_integral(ifreq_need + 1).';
         df     = f_high - f_low;
         fact2  = (wx_abs_need - f_low) ./ df;
         fact1  = 1 - fact2;

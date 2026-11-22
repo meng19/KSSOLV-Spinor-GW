@@ -118,7 +118,6 @@ for iq = 1:ctx.nq
     eps = ops.finalize(eps, acc, iq);
 end
 eps = epsilon_warn_cauchy_fallback(ctx, eps);
-gw_timer('stop', 'Epsilon total');
 
 % 存储结果
 eps.mtx = ctx.pol.mtx;
@@ -126,10 +125,15 @@ eps.nmtx = ctx.pol.nmtx;
 eps.nfreq = ctx.pol.nfreq;
 eps.freq = ctx.pol.freq;
 
+% Writing a large full-frequency checkpoint can dominate the wall time, so
+% the write is timed on its own and is also included in the epsilon total.
 if ~isempty(eps.checkpoint_file)
+    gw_timer('start', 'Epsilon checkpoint save');
     epsilon_checkpoint_save(eps.checkpoint_file, eps, eps_request, ...
         sys, options, syms);
+    gw_timer('stop', 'Epsilon checkpoint save');
 end
+gw_timer('stop', 'Epsilon total');
 
 % 最终清理
 if use_gpu
