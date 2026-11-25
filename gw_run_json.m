@@ -6,11 +6,22 @@ function [eps, sig, sys, options, syms] = gw_run_json(config_file)
 %   Required JSON fields are:
 %     qe_path, epsilon, sigma
 %   Optional fields are:
-%     read_vxc (true), rng_seed, save_file
+%     read_vxc (true), rng_seed, qp_file, save_file,
+%     epsilon.checkpoint_file, sigma.epsilon_checkpoint_file
 %
-%   Example launcher (the batch script can live anywhere):
-%     matlab -batch "addpath('C:/path/KSSOLV-Spinor-GW'); \
-%         gw_run_json('C:/path/case.json')"
+%   Strings in CONFIG_FILE may reference environment variables with
+%   ${NAME} or %NAME%; referencing an unset variable is an error.  A
+%   leading "~" in a path field is expanded to the home directory.
+%   Together with the relative-path rule above this lets one JSON file run
+%   unchanged on any machine, for example
+%     "qe_path": "${QE_DATA_ROOT}/si8"
+%
+%   Example launchers (the launcher, the JSON, and the repository may live
+%   in unrelated directories):
+%     run_gw.sh  case.json
+%     run_gw.ps1 case.json
+%     matlab -batch "addpath(getenv('KSSOLV_ROOT')); \
+%         gw_run_json(getenv('GW_JSON'))"
 
 if nargin ~= 1 || ~(ischar(config_file) || isstring(config_file))
     error('gw_run_json:InvalidInput', 'Provide exactly one JSON configuration file.');
@@ -23,7 +34,16 @@ end
 config_file = local_absolute_path(config_file, pwd);
 config_dir = fileparts(config_file);
 config = jsondecode(fileread(config_file));
+config = local_expand_environment(config);
 local_require_fields(config, {'qe_path', 'epsilon', 'sigma'});
+
+% Checkpoint files are consumed by epsilon/sigma rather than here, so they
+% are resolved now to keep their meaning independent of the working
+% directory that happens to run this function.
+config.epsilon = local_resolve_optional_paths(config.epsilon, config_dir, ...
+    {'checkpoint_file', 'checkpoint', 'breakpoint'}, true);
+config.sigma = local_resolve_optional_paths(config.sigma, config_dir, ...
+    {'epsilon_checkpoint_file', 'epsilon_checkpoint'}, false);
 
 % This function resides at the repository root, so startup no longer
 % depends on where the submission script or JSON file resides.
@@ -107,7 +127,90 @@ for ii = 1:numel(fields)
 end
 end
 
+function container = local_resolve_optional_paths(container, base_dir, fields, create_dir)
+% Resolve optional file paths stored inside the epsilon/sigma objects so
+% they follow the same rule as qe_path, qp_file, and save_file.
+if ~isstruct(container)
+    return;
+end
+for ii = 1:numel(fields)
+    name = fields{ii};
+    if ~isfield(container, name)
+        continue;
+    end
+    value = container.(name);
+    % sig.epsilon_checkpoint may hold a restored eps struct; leave it alone.
+    is_text = ischar(value) || (isstring(value) && isscalar(value));
+    if ~is_text || isempty(value)
+        continue;
+    end
+    value = local_absolute_path(char(value), base_dir);
+    value_dir = fileparts(value);
+    if create_dir && ~isempty(value_dir) && ~isfolder(value_dir)
+        mkdir(value_dir);
+    end
+    container.(name) = value;
+end
+end
+
+function value = local_expand_environment(value)
+% Recursively replace ${NAME} and %NAME% with environment variables.
+switch class(value)
+    case 'struct'
+        names = fieldnames(value);
+        for ii = 1:numel(names)
+            value.(names{ii}) = local_expand_environment(value.(names{ii}));
+        end
+    case 'cell'
+        for ii = 1:numel(value)
+            value{ii} = local_expand_environment(value{ii});
+        end
+    case {'char', 'string'}
+        value = local_expand_string(value);
+end
+end
+
+function value = local_expand_string(value)
+% Replace environment references one at a time so that a variable whose
+% value itself contains a reference cannot loop forever.
+pattern = '\$\{([A-Za-z_][A-Za-z0-9_]*)\}|%([A-Za-z_][A-Za-z0-9_]*)%';
+text = char(value);
+for iter = 1:1000
+    [match, start_idx] = regexp(text, pattern, 'match', 'start', 'once');
+    if isempty(match)
+        break;
+    end
+    if match(1) == '$'
+        name = match(3:end - 1);
+    else
+        name = match(2:end - 1);
+    end
+    replacement = getenv(name);
+    if isempty(replacement)
+        error('gw_run_json:UndefinedEnvironmentVariable', ...
+            ['Environment variable "%s" referenced by the JSON ' ...
+             'configuration is not set.'], name);
+    end
+    text = [text(1:start_idx - 1), replacement, ...
+        text(start_idx + numel(match):end)];
+end
+value = text;
+end
+
 function path_out = local_absolute_path(path_in, base_dir)
+% Expand a leading "~" before the relative/absolute decision below.
+if strcmp(path_in, '~') || startsWith(path_in, ['~' filesep]) || ...
+        startsWith(path_in, '~/')
+    home_dir = getenv('HOME');
+    if isempty(home_dir)
+        home_dir = getenv('USERPROFILE');
+    end
+    if isempty(home_dir)
+        error('gw_run_json:MissingHome', ...
+            'Cannot expand "~" because HOME and USERPROFILE are unset.');
+    end
+    path_in = [home_dir path_in(2:end)];
+end
 if ispc && ~isempty(regexp(path_in, '^[A-Za-z]:[\\/]', 'once'))
     path_out = path_in;
 elseif startsWith(path_in, filesep)

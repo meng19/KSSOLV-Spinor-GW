@@ -85,6 +85,22 @@ if ~(isnumeric(sig.isdf.component_cache_gb) && ...
     error('ISDF:ComponentCacheLimit', ...
         'sig.isdf.component_cache_gb must be a non-negative scalar or Inf.');
 end
+if ~isfield(sig.isdf, 'fullfreq_batch_bytes') || ...
+        isempty(sig.isdf.fullfreq_batch_bytes)
+    % Memory budget for one fullfreq contraction batch, which holds
+    % rank^2 x batch_size complex coefficients.
+    sig.isdf.fullfreq_batch_bytes = 48 * (1024^3);
+else
+    sig.isdf.fullfreq_batch_bytes = local_parse_byte_size( ...
+        sig.isdf.fullfreq_batch_bytes, 'sig.isdf.fullfreq_batch_bytes');
+end
+if ~(isnumeric(sig.isdf.fullfreq_batch_bytes) && ...
+        isscalar(sig.isdf.fullfreq_batch_bytes) && ...
+        sig.isdf.fullfreq_batch_bytes >= 16 * 16)
+    error('ISDF:FullfreqBatchBytes', ...
+        ['sig.isdf.fullfreq_batch_bytes must be a positive byte size, ' ...
+         'such as "48GB".']);
+end
 
 if ~isfield(sig.isdf, 'screened_kernel_cache_gb') || ...
         isempty(sig.isdf.screened_kernel_cache_gb)
@@ -111,5 +127,58 @@ if ~(isnumeric(sig.isdf.screened_kernel_cache_gb) && ...
     error('ISDF:ScreenedKernelCacheLimit', ...
         ['sig.isdf.screened_kernel_cache_gb must be a ' ...
          'non-negative scalar or Inf.']);
+end
+end
+
+function value = local_parse_byte_size(value, option_name)
+% Parse byte sizes with decimal GB or binary GiB style units.
+if ~(ischar(value) || (isstring(value) && isscalar(value)))
+    return;
+end
+text = lower(strtrim(char(value)));
+if strcmp(text, 'inf')
+    value = Inf;
+    return;
+end
+numeric_value = str2double(text);
+if ~isnan(numeric_value)
+    value = numeric_value;
+else
+    number_pattern = ...
+        '([+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?)';
+    tokens = regexp(text, ...
+        ['^' number_pattern '\s*([kmgt]?)(i?)b$'], 'tokens', 'once');
+    if isempty(tokens) || (isempty(tokens{2}) && ~isempty(tokens{3}))
+        error('ISDF:SizeOption', ...
+            ['%s must be a positive byte size, such as "48GB", ' ...
+            '"48GiB", or "4.8e10".'], option_name);
+    end
+    value = str2double(tokens{1});
+    unit = tokens{2};
+    if isempty(unit)
+        multiplier = 1;
+    else
+        if isempty(tokens{3})
+            base = 1000;
+        else
+            base = 1024;
+        end
+        switch unit
+            case 'k'
+                exponent = 1;
+            case 'm'
+                exponent = 2;
+            case 'g'
+                exponent = 3;
+            case 't'
+                exponent = 4;
+        end
+        multiplier = base^exponent;
+    end
+    value = value * multiplier;
+end
+if ~(isnumeric(value) && isreal(value) && isscalar(value) && ...
+        ~isnan(value) && value >= 1)
+    error('ISDF:SizeOption', '%s must be a positive byte size.', option_name);
 end
 end

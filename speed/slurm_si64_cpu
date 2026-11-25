@@ -20,7 +20,6 @@ module purge
 module load apps/matlab/R2024a
 matlab -nodisplay -nodesktop -nosplash -singleCompThread -r si64 > log_si64 
 
-YY=`date +%Y`
-MM=`date +%m`
-DD=`date +%d`
-echo '  '$PWD'  Finished at  ' `date` '  ' >> /public/home/mxy/slurm_log/$YY-$MM-$DD.log
+log_dir="${SLURM_LOG_DIR:-$HOME/slurm_log}"
+mkdir -p "$log_dir"
+echo '  '$PWD'  Finished at  ' `date` '  ' >> "$log_dir/$(date +%Y-%m-%d).log"

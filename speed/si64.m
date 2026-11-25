@@ -1,7 +1,7 @@
 % Fast end-to-end smoke test for the portable JSON case launcher.
 % All calculation parameters and paths are maintained in the adjacent JSON.
 
-config_file = '/public/home/mxy/work/spinor_gw/speed/KSSOLV-Spinor-GW/si64.json';
+config_file = fullfile(fileparts(mfilename('fullpath')), 'si64.json');
 profile_dir = fullfile(fileparts(config_file), 'si64_profile');
 
 % MATLAB profiler: real (wall-clock) time is appropriate for FFT, I/O,

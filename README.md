@@ -34,6 +34,74 @@ This is a spinor *GW* formalism within KSSOLV, a MATLAB toolbox for electronic s
 - **Verification**: Run a test script to verify the installation, e.g., `test_mos2_222_spinor_gw.m`
 - **Run your file**: Similar to the example script, first edit your own script and save it in the folder root directory, then run it in MATLAB
 
+### Portable runs from any install location
+
+Nothing in the code stores an absolute repository path, so the repository can
+be cloned wherever MATLAB can read it.  A run then needs only a JSON case file
+plus a few environment variables; `run_gw.sh` (Linux/macOS) and `run_gw.ps1`
+(Windows) add the repository to the MATLAB path themselves, run
+`gw_run_json`, and forward MATLAB's exit status:
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `GW_JSON` | JSON case file, used when no positional argument is given | -- |
+| `GW_WORK_DIR` | working directory; relative output paths follow it | directory of the JSON file |
+| `MATLAB_BIN` | MATLAB executable | `matlab` found on `PATH` |
+| `KSSOLV_ROOT` | repository root | directory of the launcher script |
+| `GW_MATLAB_ARGS` | extra MATLAB options, e.g. `-singleCompThread -logfile run.log` | none |
+| `GW_ENV_FILE` | settings file sourced by `run_gw.sh` | `gw_env.local` next to the script |
+
+```bash
+# Linux/macOS, also usable inside a SLURM batch script
+chmod +x run_gw.sh          # only needed after a fresh clone
+export MATLAB_BIN=/opt/matlab/R2024a/bin/matlab
+export QE_DATA_ROOT=/scratch/qe_data
+./run_gw.sh /scratch/cases/si16.json
+```
+
+```powershell
+# Windows PowerShell
+$env:QE_DATA_ROOT = 'D:\qe_data'
+.\run_gw.ps1 D:\cases\si16.json
+```
+
+In the JSON, refer to the environment instead of a machine-specific path:
+
+```json
+{ "qe_path": "${QE_DATA_ROOT}/si16/Si16_FR/02-wfn/Si16_FR.save" }
+```
+
+`${NAME}` and `%NAME%` are both expanded, and referencing an unset variable is
+an error instead of silently producing an empty path.  Relative paths remain
+relative to the JSON file, a leading `~` expands to the home directory, and
+`epsilon.checkpoint_file` / `sigma.epsilon_checkpoint_file` are resolved the
+same way.  Calling `gw_run_json` directly from MATLAB needs only one `addpath`,
+because it runs `KSSOLV_startup` itself.
+
+#### SLURM
+
+`slurm` at the repository root is self-contained: fill in the "user
+configuration" block at the top once (case JSON, the variables the JSON
+references, MATLAB module or `MATLAB_BIN`, work and log directories), then
+submit with a single command from any directory:
+
+```bash
+sbatch slurm
+```
+
+`GW_JSON` in that block selects the case; changing systems means editing that
+one line, or passing a case explicitly for a single run:
+`sbatch slurm /path/other.json`.  The `#SBATCH` header keeps ordinary defaults
+(`-p gpu`, `-c 4`, `--gres=gpu:1`, `-t 24:00:00`) and can be overridden per
+submission (`sbatch -p long -c 1 --gres=gpu:0 slurm`) without touching the
+file.  Everything in the block is exported, so the `${...}` references in the
+JSON resolve inside the job; the JSON directory and `GW_WORK_DIR` must be
+writable, and the running case name appears in `squeue`.
+
+Because the block carries site paths, `slurm` is the file to leave local when
+the repository is shared; `run_gw.sh` / `run_gw.ps1` stay path-free and can be
+driven by environment variables alone.
+
 ## Directory Structure
 
 The package is organized as follows:
@@ -124,6 +192,10 @@ to the JSON file.  A complete, tested static Si example is
 addpath('C:/path/to/KSSOLV-Spinor-GW');
 [eps, sig] = gw_run_json('C:/path/to/case.json');
 ```
+
+With the launchers the same run becomes `run_gw.sh case.json` (or
+`run_gw.ps1 case.json`), where only `GW_JSON` and the environment variables
+used by the JSON have to be provided.
 
 The top-level JSON fields are:
 

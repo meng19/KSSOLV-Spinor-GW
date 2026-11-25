@@ -43,8 +43,16 @@ asx_loc = zeros(nfreqeval, 1, 'like', kernel);
 ach_loc = zeros(nfreqeval, 1, 'like', kernel);
 achx_row = zeros(1, nbands, 'like', kernel);
 kernel_flat = reshape(kernel, rank * rank, nfreq);
-% One batch keeps rank^2 x batch_size coefficients in memory (~48 GB).
-batch_size = max(1, min(nbands, floor(3e9 / max(1, rank * rank))));
+% One batch holds rank^2 x batch_size complex coefficients, bounded by
+% sig.isdf.fullfreq_batch_bytes (default 48 GiB).
+if isfield(ctx.sig.isdf, 'fullfreq_batch_bytes') && ...
+        ~isempty(ctx.sig.isdf.fullfreq_batch_bytes)
+    batch_budget = ctx.sig.isdf.fullfreq_batch_bytes;
+else
+    batch_budget = 48 * (1024^3);
+end
+batch_size = max(1, min(nbands, floor( ...
+    batch_budget / max(1, 16 * rank * rank))));
 for first = 1:batch_size:nbands
     last = min(nbands, first + batch_size - 1);
     b = last - first + 1;

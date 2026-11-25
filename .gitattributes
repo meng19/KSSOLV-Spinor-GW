@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell entry points keep LF so they stay runnable on Linux clusters
+*.sh    text eol=lf
+slurm*  text eol=lf

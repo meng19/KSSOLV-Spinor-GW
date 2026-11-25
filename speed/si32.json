@@ -1,7 +1,7 @@
 {
   "rng_seed": 0,
   "read_vxc": true,
-  "qe_path": "/public/home/mxy/work/spinor_gw/speed/si32/Si32_FR/02-wfn/Si32_FR.save",
+  "qe_path": "${QE_DATA_ROOT}/si32/Si32_FR/02-wfn/Si32_FR.save",
   "qp_file": "si32_isdf_qp.dat",
   "epsilon": {
     "nbnd": 255,

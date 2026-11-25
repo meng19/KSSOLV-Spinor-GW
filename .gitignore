@@ -69,6 +69,9 @@ Thumbs.db
 .worktrees/
 .superpowers/
 
+# 本机路径设置（slurm/run_gw 会读取，不入库）
+gw_env.local
+
 # 编译输出
 *.obj
 *.o
